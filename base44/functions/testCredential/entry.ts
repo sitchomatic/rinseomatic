@@ -24,15 +24,21 @@ function buildScenario(site, username, password) {
   return { instructions: steps };
 }
 
+const BLOCK_MARKERS = ['/blocked', '/error', '/access-denied', '/forbidden', '/captcha', '/challenge'];
+
 function classify(site, finalUrl, markerFound) {
   const loginMarker = site.login_url_marker || '/login';
   const successUrlContains = site.success_url_contains;
+  const url = (finalUrl || '').toLowerCase();
 
-  const urlOkByMarker = loginMarker ? !finalUrl.includes(loginMarker) : true;
-  const urlOkByContains = successUrlContains ? finalUrl.includes(successUrlContains) : true;
+  // Hard block / challenge pages are never success
+  const hitBlock = BLOCK_MARKERS.some((m) => url.includes(m));
+  if (hitBlock && !markerFound) return 'failed';
+
+  const urlOkByMarker = loginMarker ? !url.includes(loginMarker) : true;
+  const urlOkByContains = successUrlContains ? url.includes(successUrlContains.toLowerCase()) : true;
   const urlChanged = urlOkByMarker && urlOkByContains;
 
-  // Success = URL changed away from login OR success alert detected
   if (urlChanged || markerFound) return 'working';
   return 'failed';
 }

@@ -48,7 +48,7 @@ async function runSingleTest(site, apiKey, username, password) {
     api_key: apiKey,
     url: site.login_url,
     render_js: 'true',
-    premium_proxy: 'true',
+    stealth_proxy: 'true',
     block_resources: 'false',
     return_page_source: 'true',
     js_scenario: JSON.stringify(scenario),

@@ -19,10 +19,13 @@ export default function NewRunDialog({
 
   React.useEffect(() => {
     if (!open) return;
-    // Prefer default site, else first site that actually has credentials, else first site
-    const firstWithCreds = (sites || []).find((s) => (countsBySite?.[s.key] || 0) > 0)?.key;
+    // Prefer explicit default, else the site with the MOST credentials, else first site
+    const bestSite = (sites || [])
+      .map((s) => ({ key: s.key, n: countsBySite?.[s.key] || 0 }))
+      .sort((a, b) => b.n - a.n)[0];
+    const autoSite = bestSite && bestSite.n > 0 ? bestSite.key : sites?.[0]?.key;
     setForm({
-      site_key: defaultSiteKey || firstWithCreds || sites?.[0]?.key || "",
+      site_key: defaultSiteKey || autoSite || "",
       concurrency: 2,
       max_retries: 1,
       label: "",

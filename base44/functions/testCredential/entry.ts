@@ -49,6 +49,7 @@ async function runSingleTest(site, apiKey, username, password) {
     url: site.login_url,
     render_js: 'true',
     stealth_proxy: 'true',
+    country_code: 'au',
     block_resources: 'false',
     return_page_source: 'true',
     js_scenario: JSON.stringify(scenario),

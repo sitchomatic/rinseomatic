@@ -18,7 +18,16 @@
         "https",
         "socks5",
         "wireguard"
-      ]
+      ],
+      "default": "http"
+    },
+    "username": {
+      "type": "string",
+      "description": "Optional proxy auth username"
+    },
+    "password": {
+      "type": "string",
+      "description": "Optional proxy auth password"
     },
     "region": {
       "type": "string"
@@ -43,9 +52,31 @@
     "rotation_weight": {
       "type": "number",
       "default": 1
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
     }
   },
   "required": [
     "host"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {},
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }

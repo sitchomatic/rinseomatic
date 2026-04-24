@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Upload, Play, KeyRound, Settings as SettingsIcon } from "lucide-react";
+import { Plus, Search, Upload, Play, KeyRound, Settings as SettingsIcon, Target } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
@@ -22,6 +22,8 @@ export default function Credentials() {
   const [addOpen, setAddOpen] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
   const [runOpen, setRunOpen] = React.useState(false);
+  const [runTargets, setRunTargets] = React.useState(null); // e.g. ['joe'] — narrows the run
+  const [runTitle, setRunTitle] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [siteFilter, setSiteFilter] = React.useState("all");
   const [selected, setSelected] = React.useState(new Set());
@@ -77,13 +79,21 @@ export default function Credentials() {
   const sameSite = selectedItems.every((c) => c.site_key === runSiteKey);
   const canRunSelected = selectedItems.length > 0 && sameSite;
 
-  const startRun = async ({ site_key, concurrency, max_retries, label }) => {
+  const startRun = async ({ site_key, concurrency, max_retries, label, target_site_keys, proxy }) => {
     const creds = selectedItems.length > 0 ? selectedItems : items.filter((c) => c.site_key === site_key);
     if (creds.length === 0) return toast.error("No credentials for this site");
 
+    const targetSuffix = Array.isArray(target_site_keys) && target_site_keys.length > 0
+      ? ` → ${target_site_keys.join("+")}`
+      : "";
+
     const run = await base44.entities.TestRun.create({
-      label: label || `${creds.length} × ${site_key}`,
+      label: label || `${creds.length} × ${site_key}${targetSuffix}`,
       site_key, concurrency, max_retries,
+      target_site_keys: target_site_keys || [],
+      proxy_type: proxy?.type,
+      country_code: proxy?.country_code,
+      external_proxy_id: proxy?.type === "external" ? proxy?.external_proxy_id : undefined,
       status: "queued",
       total_count: creds.length,
       pending_count: creds.length,
@@ -107,6 +117,16 @@ export default function Credentials() {
     return acc;
   }, {});
 
+  const doubleCount = siteCounts["double"] || 0;
+  const hasJoeSite = sites.some((s) => s.key === "joe");
+  const hasIgnitionSite = sites.some((s) => s.key === "ignition");
+
+  const openDoubleRun = (targets, title) => {
+    setRunTargets(targets);
+    setRunTitle(title);
+    setRunOpen(true);
+  };
+
   return (
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
       <PageHeader
@@ -122,7 +142,7 @@ export default function Credentials() {
               <Plus className="h-3.5 w-3.5" /> Add
             </Button>
             <Button size="sm" className="gap-2"
-              onClick={() => setRunOpen(true)}
+              onClick={() => { setRunTargets(null); setRunTitle(""); setRunOpen(true); }}
               disabled={items.length === 0 || (selected.size > 0 && !sameSite)}
               title={selected.size > 0 && !sameSite ? "Selected credentials must share one site" : undefined}
             >
@@ -179,11 +199,32 @@ export default function Credentials() {
         />
       ) : (
         <>
+          {siteFilter === "double" && doubleCount > 0 && (hasJoeSite || hasIgnitionSite) && (
+            <div className="mb-4 rounded-xl border border-border bg-card/60 p-3 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Target className="h-3.5 w-3.5 text-primary" />
+                Quick-launch Double credentials against a single site:
+              </div>
+              {hasJoeSite && (
+                <Button size="sm" variant="outline" className="gap-2"
+                  onClick={() => openDoubleRun(["joe"], "Test Double creds → Joe only")}>
+                  <Play className="h-3 w-3" /> Test via Joe only
+                </Button>
+              )}
+              {hasIgnitionSite && (
+                <Button size="sm" variant="outline" className="gap-2"
+                  onClick={() => openDoubleRun(["ignition"], "Test Double creds → Ignition only")}>
+                  <Play className="h-3 w-3" /> Test via Ignition only
+                </Button>
+              )}
+            </div>
+          )}
+
           <BulkActionsBar
             count={selected.size}
             sameSite={sameSite}
             onClear={() => setSelected(new Set())}
-            onRun={() => setRunOpen(true)}
+            onRun={() => { setRunTargets(null); setRunTitle(""); setRunOpen(true); }}
             onDelete={() => setConfirmBulk(true)}
           />
           <CredentialsTable
@@ -221,10 +262,15 @@ export default function Credentials() {
       <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} sites={sites} onImport={(rows) => bulkMut.mutate(rows)} />
       <NewRunDialog
         open={runOpen}
-        onOpenChange={setRunOpen}
+        onOpenChange={(v) => { setRunOpen(v); if (!v) { setRunTargets(null); setRunTitle(""); } }}
         sites={sites}
-        defaultSiteKey={runSiteKey || (siteFilter !== "all" ? siteFilter : undefined)}
-        lockedSiteKey={canRunSelected ? runSiteKey : undefined}
+        defaultSiteKey={
+          runTargets ? "double"
+          : (runSiteKey || (siteFilter !== "all" ? siteFilter : undefined))
+        }
+        lockedSiteKey={runTargets ? "double" : (canRunSelected ? runSiteKey : undefined)}
+        targetSiteKeys={runTargets || undefined}
+        titleOverride={runTitle || undefined}
         countsBySite={
           selectedItems.length > 0
             ? { [runSiteKey]: selectedItems.length }

@@ -10,6 +10,8 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Plus, Trash2, Sparkles, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import ProxyDefaultsCard from "@/components/settings/ProxyDefaultsCard";
+import ExternalProxiesCard from "@/components/settings/ExternalProxiesCard";
 
 const BLANK = {
   key: "", label: "", login_url: "",
@@ -72,6 +74,11 @@ export default function Settings() {
           ) : null
         }
       />
+
+      <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <ProxyDefaultsCard />
+        <ExternalProxiesCard />
+      </div>
 
       <div className="grid lg:grid-cols-[1fr_420px] gap-6">
         <div className="space-y-3">

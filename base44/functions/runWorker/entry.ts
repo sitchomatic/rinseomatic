@@ -4,7 +4,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // and updates the TestRun counters. Designed to be invoked repeatedly from the UI
 // (simple polling) so runs survive page refresh.
 
-async function testOne(base44, site, result) {
+async function testOne(base44, site, result, run) {
   const started = Date.now();
   try {
     const cred = await base44.asServiceRole.entities.Credential.filter({ id: result.credential_id });
@@ -16,7 +16,20 @@ async function testOne(base44, site, result) {
     const res = await base44.functions.invoke('testCredential', {
       username: credential.username,
       password: credential.password,
+      extra_passwords: credential.extra_passwords || [],
       site_key: site.key,
+      target_site_keys: Array.isArray(run.target_site_keys) && run.target_site_keys.length > 0 ? run.target_site_keys : undefined,
+      custom_url: run.custom_url || undefined,
+      strategy: run.login_strategy || undefined,
+      proxy: {
+        proxy_mode: run.proxy_mode,
+        country_code: run.country_code,
+        proxy_city: run.proxy_city,
+        proxy_sticky: run.proxy_sticky,
+        proxy_locale_match: run.proxy_locale_match,
+        proxy_preset: run.proxy_preset,
+        external_proxy_id: run.external_proxy_id,
+      },
     });
 
     const data = res?.data || res;
@@ -139,7 +152,7 @@ Deno.serve(async (req) => {
     ));
 
     // Execute in parallel
-    const outcomes = await Promise.all(queued.map((r) => testOne(base44, site, r)));
+    const outcomes = await Promise.all(queued.map((r) => testOne(base44, site, r, run)));
 
     // Persist results + retry on error
     const maxRetries = run.max_retries ?? 1;
@@ -170,6 +183,7 @@ Deno.serve(async (req) => {
               last_tested: new Date().toISOString(),
               last_result_note: o.error_message || (o.final_url ? `→ ${o.final_url}` : null),
               attempts: (existing[0].attempts || 0) + 1,
+              ...(o.working_password ? { working_password: o.working_password } : {}),
             });
           }
         } catch (_) { /* ignore */ }

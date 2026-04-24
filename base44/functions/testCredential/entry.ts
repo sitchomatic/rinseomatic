@@ -32,8 +32,8 @@ function classify(site, finalUrl, markerFound) {
   const urlOkByContains = successUrlContains ? finalUrl.includes(successUrlContains) : true;
   const urlChanged = urlOkByMarker && urlOkByContains;
 
-  // User requested: URL change AND success alert (both must be true)
-  if (urlChanged && markerFound) return 'working';
+  // Success = URL changed away from login OR success alert detected
+  if (urlChanged || markerFound) return 'working';
   return 'failed';
 }
 

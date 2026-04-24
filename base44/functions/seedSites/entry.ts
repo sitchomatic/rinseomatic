@@ -4,7 +4,7 @@ const DEFAULT_SITES = [
   {
     key: 'joe',
     label: 'Joe',
-    login_url: 'https://example.com/login',
+    login_url: 'https://www.joefortunepokies.eu/login',
     username_selector: "input[type='email'], input[name='username']",
     password_selector: "input[type='password']",
     submit_selector: "button[type='submit']",

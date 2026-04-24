@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
       url: site.login_url,
       render_js: 'true',
       premium_proxy: 'true',
+      block_resources: 'false',
       return_page_source: 'true',
       js_scenario: JSON.stringify(scenario),
     });

@@ -1,0 +1,51 @@
+{
+  "name": "AppSettings",
+  "type": "object",
+  "properties": {
+    "singleton_key": {
+      "type": "string",
+      "default": "global",
+      "description": "Always 'global' \u2014 there is only one settings record."
+    },
+    "proxy_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "datacenter",
+        "premium",
+        "stealth",
+        "external"
+      ],
+      "default": "stealth",
+      "description": "Default proxy mode. 'external' uses a Proxy entity via ScrapingBee own_proxy."
+    },
+    "country_code": {
+      "type": "string",
+      "default": "au",
+      "description": "ISO 3166-1 alpha-2 code (e.g. 'au'). Ignored when proxy_type is 'none' or 'external'."
+    },
+    "external_proxy_id": {
+      "type": "string",
+      "description": "ID of a Proxy entity to use when proxy_type is 'external'."
+    }
+  },
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {},
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "required": []
+}

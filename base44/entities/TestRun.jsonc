@@ -8,6 +8,13 @@
     "site_key": {
       "type": "string"
     },
+    "target_site_keys": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional: override the site's default testing targets. Used when testing aggregator creds against a single underlying site (e.g. Double \u2192 Joe only)."
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -26,6 +33,25 @@
     "max_retries": {
       "type": "number",
       "default": 1
+    },
+    "proxy_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "datacenter",
+        "premium",
+        "stealth",
+        "external"
+      ],
+      "description": "Proxy mode for this run. Falls back to AppSettings global if unset."
+    },
+    "country_code": {
+      "type": "string",
+      "description": "ISO country code for the proxy (e.g. 'au')."
+    },
+    "external_proxy_id": {
+      "type": "string",
+      "description": "Proxy entity id when proxy_type is 'external'."
     },
     "total_count": {
       "type": "number",

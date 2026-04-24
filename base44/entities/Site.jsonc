@@ -11,7 +11,7 @@
     },
     "login_url": {
       "type": "string",
-      "description": "URL of the login form"
+      "description": "URL of the login form. Optional when skip_primary is true (aggregator sites)."
     },
     "username_selector": {
       "type": "string",
@@ -45,12 +45,23 @@
     "enabled": {
       "type": "boolean",
       "default": true
+    },
+    "secondary_site_keys": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional site keys to also test the credential against. Results are combined (working if any succeeds)."
+    },
+    "skip_primary": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, skip testing this site's own login_url and only test the secondary_site_keys. Used for aggregator sites like 'double'."
     }
   },
   "required": [
     "key",
-    "label",
-    "login_url"
+    "label"
   ],
   "rls": {
     "create": {

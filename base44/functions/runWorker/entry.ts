@@ -49,8 +49,45 @@ Deno.serve(async (req) => {
     const run = runs[0];
     if (!run) return Response.json({ error: 'Run not found' }, { status: 404 });
 
-    if (run.status === 'cancelled' || run.status === 'completed') {
+    if (run.status === 'cancelled' || run.status === 'completed' || run.status === 'failed') {
       return Response.json({ done: true, status: run.status });
+    }
+
+    // Stuck-run recovery: if a run has been active >10 min with no tested_at progress >5 min,
+    // mark it failed and flush queued/running results to 'error'.
+    const RUN_MAX_MS = 10 * 60 * 1000;
+    const IDLE_MAX_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    const startedAt = run.started_at ? new Date(run.started_at).getTime() : null;
+    if (startedAt && now - startedAt > RUN_MAX_MS) {
+      const active = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
+      const lastTested = active
+        .map((r) => (r.tested_at ? new Date(r.tested_at).getTime() : 0))
+        .reduce((a, b) => Math.max(a, b), 0);
+      const idle = lastTested === 0 ? (now - startedAt) : (now - lastTested);
+      if (idle > IDLE_MAX_MS) {
+        const stuck = active.filter((r) => r.status === 'queued' || r.status === 'running');
+        await Promise.all(stuck.map((r) =>
+          base44.asServiceRole.entities.TestResult.update(r.id, {
+            status: 'error',
+            error_message: 'Stuck run auto-recovered (no progress)',
+            tested_at: new Date().toISOString(),
+          })
+        ));
+        const working = active.filter((r) => r.status === 'working').length;
+        const failed = active.filter((r) => r.status === 'failed').length;
+        const errored = active.filter((r) => r.status === 'error').length + stuck.length;
+        await base44.asServiceRole.entities.TestRun.update(run_id, {
+          status: 'failed',
+          ended_at: new Date().toISOString(),
+          elapsed_ms: now - startedAt,
+          pending_count: 0,
+          working_count: working,
+          failed_count: failed,
+          error_count: errored,
+        });
+        return Response.json({ done: true, recovered: true, stuck: stuck.length });
+      }
     }
 
     const sites = await base44.asServiceRole.entities.Site.filter({ key: run.site_key });

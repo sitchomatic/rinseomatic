@@ -7,6 +7,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import Layout from '@/components/Layout';
+import Dashboard from '@/pages/Dashboard';
 import Credentials from '@/pages/Credentials';
 import Runs from '@/pages/Runs';
 import RunDetail from '@/pages/RunDetail';
@@ -31,7 +32,7 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<Credentials />} />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/credentials" element={<Credentials />} />
         <Route path="/runs" element={<Runs />} />
         <Route path="/runs/:id" element={<RunDetail />} />

@@ -11,6 +11,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import CredentialsTable from "@/components/credentials/CredentialsTable";
 import CredentialDialog from "@/components/credentials/CredentialDialog";
 import CsvImportDialog from "@/components/credentials/CsvImportDialog";
+import BulkActionsBar from "@/components/credentials/BulkActionsBar";
 import NewRunDialog from "@/components/runs/NewRunDialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +26,7 @@ export default function Credentials() {
   const [siteFilter, setSiteFilter] = React.useState("all");
   const [selected, setSelected] = React.useState(new Set());
   const [confirmDelete, setConfirmDelete] = React.useState(null);
+  const [confirmBulk, setConfirmBulk] = React.useState(false);
 
   const { data: sites = [], isLoading: sitesLoading } = useQuery({
     queryKey: ["sites"],
@@ -47,6 +49,14 @@ export default function Credentials() {
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Credential.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["credentials"] }),
+  });
+  const bulkDeleteMut = useMutation({
+    mutationFn: async (ids) => { await Promise.all(ids.map((id) => base44.entities.Credential.delete(id))); return ids.length; },
+    onSuccess: (n) => {
+      qc.invalidateQueries({ queryKey: ["credentials"] });
+      setSelected(new Set());
+      toast.success(`Deleted ${n} credential${n === 1 ? "" : "s"}`);
+    },
   });
 
   const filtered = items.filter((c) => {
@@ -168,14 +178,23 @@ export default function Credentials() {
           }
         />
       ) : (
-        <CredentialsTable
-          items={filtered}
-          sites={sites}
-          selected={selected}
-          onToggle={toggle}
-          onToggleAll={toggleAll}
-          onDelete={(c) => setConfirmDelete(c)}
-        />
+        <>
+          <BulkActionsBar
+            count={selected.size}
+            sameSite={sameSite}
+            onClear={() => setSelected(new Set())}
+            onRun={() => setRunOpen(true)}
+            onDelete={() => setConfirmBulk(true)}
+          />
+          <CredentialsTable
+            items={filtered}
+            sites={sites}
+            selected={selected}
+            onToggle={toggle}
+            onToggleAll={toggleAll}
+            onDelete={(c) => setConfirmDelete(c)}
+          />
+        </>
       )}
 
       <ConfirmDialog
@@ -186,6 +205,16 @@ export default function Credentials() {
         confirmLabel="Delete"
         destructive
         onConfirm={() => { if (confirmDelete) deleteMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
+      />
+
+      <ConfirmDialog
+        open={confirmBulk}
+        onOpenChange={setConfirmBulk}
+        title={`Delete ${selected.size} credentials?`}
+        description="This is permanent and cannot be undone."
+        confirmLabel={`Delete ${selected.size}`}
+        destructive
+        onConfirm={() => bulkDeleteMut.mutate(Array.from(selected))}
       />
 
       <CredentialDialog open={addOpen} onOpenChange={setAddOpen} sites={sites} onSubmit={(d) => createMut.mutate(d)} />

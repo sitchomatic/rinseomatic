@@ -3,7 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2, Download } from "lucide-react";
+import { toCsv, downloadFile } from "@/lib/download";
+import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import PageHeader from "@/components/shared/PageHeader";
 import StatusPill from "@/components/shared/StatusPill";
@@ -82,6 +84,24 @@ export default function RunDetail() {
 
   const filtered = tab === "all" ? results : results.filter((r) => r.status === tab);
 
+  const exportCsv = () => {
+    if (!results.length) return toast.error("No results to export");
+    const csv = toCsv(filtered, [
+      { label: "Username", key: "username" },
+      { label: "Status", key: "status" },
+      { label: "Attempts", key: "attempts" },
+      { label: "Final URL", key: "final_url" },
+      { label: "Success Marker", value: (r) => r.success_marker_found ? "true" : "false" },
+      { label: "Error", key: "error_message" },
+      { label: "Elapsed (ms)", key: "elapsed_ms" },
+      { label: "Tested At", value: (r) => r.tested_at || "" },
+    ]);
+    const stamp = format(new Date(), "yyyyMMdd-HHmm");
+    const slug = (run.label || run.site_key || "run").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    downloadFile(`${slug}-${tab}-${stamp}.csv`, csv);
+    toast.success(`Exported ${filtered.length} rows`);
+  };
+
   return (
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
       <Link to="/runs" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-mono uppercase tracking-wider mb-4">
@@ -95,6 +115,9 @@ export default function RunDetail() {
         actions={
           <>
             <StatusPill status={run.status} />
+            <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv} disabled={results.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
             {(run.status === "running" || run.status === "queued") && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => cancelMut.mutate()}>
                 <Square className="h-3.5 w-3.5" /> Cancel

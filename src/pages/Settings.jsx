@@ -72,8 +72,13 @@ export default function Settings() {
         description="Sites, proxies, and browser defaults. API tokens are stored server-side as secrets."
         actions={
           sites.length === 0 ? (
-            <Button size="sm" variant="outline" className="gap-2" onClick={() => seedMut.mutate()} disabled={seedMut.isPending}>
-              <Sparkles className="h-3.5 w-3.5" /> Seed defaults
+            <Button
+              size="sm" variant="outline" className="gap-2"
+              onClick={() => seedMut.mutate()}
+              disabled={seedMut.isPending}
+              title="Creates a starter set of sites (Joe, Ignition, PPSR, Double) so you can start testing immediately."
+            >
+              <Sparkles className="h-3.5 w-3.5" /> {seedMut.isPending ? "Seeding…" : "Seed default sites"}
             </Button>
           ) : null
         }
@@ -86,7 +91,12 @@ export default function Settings() {
 
       <div className="grid lg:grid-cols-[1fr_420px] gap-6">
         <div className="space-y-3">
-          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Configured sites · {sites.length}</div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Configured sites · {sites.length}</div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              Every credential belongs to a site. The runner uses the site's login URL and selectors to submit the form, then checks the success marker to decide if the login worked.
+            </div>
+          </div>
           {sites.length === 0 && (
             <div className="rounded-xl border border-dashed border-border bg-card/40 py-10 text-center text-sm text-muted-foreground">
               No sites yet. Add one on the right, or click "Seed defaults".
@@ -112,11 +122,14 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setDraft(s)}>
+                  <Button variant="ghost" size="sm" className="gap-1.5"
+                    onClick={() => setDraft(s)}
+                    title="Load this site into the form on the right for editing">
                     <Pencil className="h-3 w-3" /> Edit
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-400"
-                    onClick={() => setConfirmDelete(s)}>
+                    onClick={() => setConfirmDelete(s)}
+                    title="Delete this site (credentials referencing it will remain but become untestable)">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -136,25 +149,86 @@ export default function Settings() {
             <Plus className="h-4 w-4 text-primary" />
             <div className="text-sm font-medium">{editing ? "Edit site" : "Add site"}</div>
           </div>
-          <Field label="Key (slug)" value={draft.key} onChange={(v) => setDraft({ ...draft, key: v })} />
-          <Field label="Label" value={draft.label} onChange={(v) => setDraft({ ...draft, label: v })} />
-          <Field label="Login URL" value={draft.login_url} onChange={(v) => setDraft({ ...draft, login_url: v })} />
-          <Field label="Username selector" mono value={draft.username_selector} onChange={(v) => setDraft({ ...draft, username_selector: v })} />
-          <Field label="Password selector" mono value={draft.password_selector} onChange={(v) => setDraft({ ...draft, password_selector: v })} />
-          <Field label="Submit selector" mono value={draft.submit_selector} onChange={(v) => setDraft({ ...draft, submit_selector: v })} />
-          <Field label="Success selector" mono value={draft.success_selector} onChange={(v) => setDraft({ ...draft, success_selector: v })} />
-          <Field label="Login URL marker (fail if URL still contains)" mono value={draft.login_url_marker} onChange={(v) => setDraft({ ...draft, login_url_marker: v })} />
-          <Field label="Success URL contains (optional)" mono value={draft.success_url_contains || ""} onChange={(v) => setDraft({ ...draft, success_url_contains: v })} />
-          <Field label="Wait after submit (ms)" type="number" value={draft.wait_after_submit_ms} onChange={(v) => setDraft({ ...draft, wait_after_submit_ms: Number(v) || 0 })} />
-          <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            Describe how to log in: the URL, which fields to fill, and how to detect success.
+          </p>
+
+          <Field
+            label="Key (slug)"
+            help="Short unique ID used internally (e.g. 'joe'). Credentials and runs reference this."
+            value={draft.key} onChange={(v) => setDraft({ ...draft, key: v })}
+          />
+          <Field
+            label="Label"
+            help="Human-friendly name shown in the UI (e.g. 'Joe Fortune')."
+            value={draft.label} onChange={(v) => setDraft({ ...draft, label: v })}
+          />
+          <Field
+            label="Login URL"
+            help="Full URL the runner navigates to before filling the form."
+            value={draft.login_url} onChange={(v) => setDraft({ ...draft, login_url: v })}
+          />
+          <Field
+            label="Username selector" mono
+            help="CSS selector for the email/username input."
+            value={draft.username_selector} onChange={(v) => setDraft({ ...draft, username_selector: v })}
+          />
+          <Field
+            label="Password selector" mono
+            help="CSS selector for the password input."
+            value={draft.password_selector} onChange={(v) => setDraft({ ...draft, password_selector: v })}
+          />
+          <Field
+            label="Submit selector" mono
+            help="CSS selector for the submit button."
+            value={draft.submit_selector} onChange={(v) => setDraft({ ...draft, submit_selector: v })}
+          />
+          <Field
+            label="Success selector" mono
+            help="CSS selector that only appears AFTER a successful login (e.g. welcome banner). If visible → credential marked 'working'."
+            value={draft.success_selector} onChange={(v) => setDraft({ ...draft, success_selector: v })}
+          />
+          <Field
+            label="Login URL marker" mono
+            help="If the post-submit URL STILL contains this substring (e.g. '/login'), the attempt is treated as failed."
+            value={draft.login_url_marker} onChange={(v) => setDraft({ ...draft, login_url_marker: v })}
+          />
+          <Field
+            label="Success URL contains" mono
+            help="Optional. If the post-submit URL contains this substring (e.g. '/dashboard'), the attempt counts as working even without the success selector."
+            value={draft.success_url_contains || ""} onChange={(v) => setDraft({ ...draft, success_url_contains: v })}
+          />
+          <Field
+            label="Wait after submit (ms)" type="number"
+            help="How long to wait after clicking submit before checking for success. Increase for slow sites; decrease to speed up testing."
+            value={draft.wait_after_submit_ms} onChange={(v) => setDraft({ ...draft, wait_after_submit_ms: Number(v) || 0 })}
+          />
+
+          <div className="flex items-center justify-between pt-2 border-t border-border/60">
+            <label className="flex items-center gap-2 cursor-pointer" title="When off, this site is hidden from run pickers and new credentials can't target it.">
               <Switch checked={!!draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
-              <span className="text-sm text-muted-foreground">Enabled</span>
-            </div>
+              <div className="text-xs">
+                <div>Enabled</div>
+                <div className="text-[10px] text-muted-foreground">{draft.enabled ? "Available in run pickers" : "Hidden from run pickers"}</div>
+              </div>
+            </label>
             <div className="flex gap-2">
-              {editing && <Button variant="outline" size="sm" onClick={() => setDraft(BLANK)}>Cancel</Button>}
-              <Button size="sm" onClick={() => saveMut.mutate(draft)} disabled={!draft.key || !draft.label || !draft.login_url}>
-                {editing ? "Save" : "Add"}
+              {editing && (
+                <Button variant="outline" size="sm" onClick={() => setDraft(BLANK)} title="Discard changes and clear the form">
+                  Cancel
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => saveMut.mutate(draft)}
+                disabled={!draft.key || !draft.label || !draft.login_url || saveMut.isPending}
+                title={
+                  !draft.key || !draft.label || !draft.login_url
+                    ? "Key, label, and login URL are required"
+                    : editing ? "Save changes to this site" : "Create this site"
+                }
+              >
+                {saveMut.isPending ? "Saving…" : editing ? "Save site" : "Add site"}
               </Button>
             </div>
           </div>
@@ -174,11 +248,12 @@ export default function Settings() {
   );
 }
 
-function Field({ label, value, onChange, mono, type = "text" }) {
+function Field({ label, help, value, onChange, mono, type = "text" }) {
   return (
     <div className="grid gap-1">
       <Label className="text-xs">{label}</Label>
       <Input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={mono ? "font-mono text-xs" : ""} />
+      {help && <p className="text-[10px] text-muted-foreground leading-snug">{help}</p>}
     </div>
   );
 }

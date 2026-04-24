@@ -223,8 +223,13 @@ export default function Credentials() {
         open={runOpen}
         onOpenChange={setRunOpen}
         sites={sites}
-        defaultSiteKey={runSiteKey || (siteFilter !== "all" ? siteFilter : sites[0]?.key)}
-        credentialCount={selectedItems.length > 0 ? selectedItems.length : (items.filter((c) => c.site_key === (runSiteKey || (siteFilter !== "all" ? siteFilter : sites[0]?.key))).length)}
+        defaultSiteKey={runSiteKey || (siteFilter !== "all" ? siteFilter : undefined)}
+        lockedSiteKey={canRunSelected ? runSiteKey : undefined}
+        countsBySite={
+          selectedItems.length > 0
+            ? { [runSiteKey]: selectedItems.length }
+            : siteCounts
+        }
         onCreate={startRun}
       />
     </div>

@@ -7,11 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel";
+import ExternalProxiesManager from "@/components/settings/ExternalProxiesManager";
 import { Plus, Trash2, Sparkles, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import ProxyDefaultsCard from "@/components/settings/ProxyDefaultsCard";
-import ExternalProxiesCard from "@/components/settings/ExternalProxiesCard";
 
 const BLANK = {
   key: "", label: "", login_url: "",
@@ -30,6 +30,10 @@ export default function Settings() {
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+  });
+  const { data: proxies = [] } = useQuery({
+    queryKey: ["proxies"],
+    queryFn: () => base44.entities.Proxy.list("-created_date", 100),
   });
 
   const [draft, setDraft] = React.useState(BLANK);
@@ -65,7 +69,7 @@ export default function Settings() {
       <PageHeader
         eyebrow="03 · config"
         title="Settings"
-        description="Sites the tester can log into. ScrapingBee API key is stored server-side as a secret."
+        description="Sites, proxies, and browser defaults. API tokens are stored server-side as secrets."
         actions={
           sites.length === 0 ? (
             <Button size="sm" variant="outline" className="gap-2" onClick={() => seedMut.mutate()} disabled={seedMut.isPending}>
@@ -75,9 +79,9 @@ export default function Settings() {
         }
       />
 
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        <ProxyDefaultsCard />
-        <ExternalProxiesCard />
+      <div className="space-y-6 mb-8">
+        <ProxySettingsPanel proxies={proxies} />
+        <ExternalProxiesManager proxies={proxies} />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_420px] gap-6">

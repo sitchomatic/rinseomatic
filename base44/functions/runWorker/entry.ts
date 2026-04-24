@@ -37,6 +37,7 @@ async function testOne(base44, site, result, run) {
       status: data.status || 'error',
       final_url: data.final_url,
       success_marker_found: data.success_marker_found,
+      working_password: data.working_password,
       error_message: data.error_message,
       elapsed_ms: data.elapsed_ms ?? (Date.now() - started),
     };

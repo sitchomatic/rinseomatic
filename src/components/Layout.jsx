@@ -3,6 +3,14 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
+import LiveTerminal from "@/components/terminal/LiveTerminal";
+import { installNetworkInterceptor } from "@/lib/installNetworkInterceptor";
+import { startLogStreamer } from "@/lib/installLogStreamer";
+
+// Boot the terminal capture as soon as the Layout module loads. Both helpers
+// are idempotent so this is safe across HMR.
+installNetworkInterceptor();
+startLogStreamer();
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -90,6 +98,8 @@ export default function Layout() {
       <main className="flex-1 min-w-0">
         <Outlet />
       </main>
+
+      <LiveTerminal />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/dashboard/StatCard";
 import SiteBreakdown from "@/components/dashboard/SiteBreakdown";
 import RecentRuns from "@/components/dashboard/RecentRuns";
+import ActivitySummary from "@/components/dashboard/ActivitySummary";
 
 export default function Dashboard() {
   const { data: credentials = [], isLoading: loadingCreds } = useQuery({
@@ -74,6 +75,8 @@ export default function Dashboard() {
         <StatCard label="Untested" value={untested} sub={errored ? `${errored} errored` : undefined} />
         <StatCard label="Active runs" value={activeRuns} sub={runs.length ? `${runs.length} total` : "none yet"} icon={Activity} accent={activeRuns > 0 ? "text-sky-300" : undefined} />
       </div>
+
+      <ActivitySummary credentials={credentials} runs={runs} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SiteBreakdown sites={sites} credentials={credentials} />

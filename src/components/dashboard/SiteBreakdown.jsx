@@ -33,25 +33,25 @@ export default function SiteBreakdown({ sites, credentials }) {
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-border bg-secondary/40">
+      <div className="px-5 py-4 border-b border-border bg-secondary/40">
         <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">By site</div>
       </div>
       <div className="divide-y divide-border/60">
         {rows.map((r) => (
-          <div key={r.site.key} className="px-4 py-3">
-            <div className="flex items-center justify-between gap-3 mb-2">
+          <div key={r.site.key} className="px-5 py-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
               <SiteChip siteKey={r.site.key} label={r.site.label} size="sm" />
               <div className="text-xs font-mono text-muted-foreground">
                 <span className="text-foreground font-semibold">{r.working}</span>/{r.total} working · <span className="tabular-nums">{r.pct}%</span>
               </div>
             </div>
-            <div className="h-1.5 bg-secondary rounded-full overflow-hidden flex">
+            <div className="h-2 bg-secondary rounded-full overflow-hidden flex">
               <Bar value={r.working} total={r.total} className="bg-emerald-400" />
               <Bar value={r.failed} total={r.total} className="bg-rose-400" />
               <Bar value={r.error} total={r.total} className="bg-amber-400" />
               <Bar value={r.untested} total={r.total} className="bg-muted-foreground/40" />
             </div>
-            <div className="flex items-center gap-3 mt-2 text-[10px] font-mono text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[10px] font-mono text-muted-foreground">
               <Legend color="bg-emerald-400" label={`${r.working} ok`} />
               <Legend color="bg-rose-400" label={`${r.failed} fail`} />
               {r.error > 0 && <Legend color="bg-amber-400" label={`${r.error} err`} />}

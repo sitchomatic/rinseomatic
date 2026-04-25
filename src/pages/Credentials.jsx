@@ -61,11 +61,14 @@ export default function Credentials() {
     },
   });
 
-  const filtered = items.filter((c) => {
-    if (siteFilter !== "all" && c.site_key !== siteFilter) return false;
-    if (search && !(c.username || "").toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((c) => {
+      if (siteFilter !== "all" && c.site_key !== siteFilter) return false;
+      if (q && !(c.username || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [items, siteFilter, search]);
 
   const toggle = (id) => setSelected((s) => {
     const n = new Set(s);
@@ -74,7 +77,10 @@ export default function Credentials() {
   });
   const toggleAll = () => setSelected((s) => s.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)));
 
-  const selectedItems = items.filter((c) => selected.has(c.id));
+  const selectedItems = React.useMemo(
+    () => items.filter((c) => selected.has(c.id)),
+    [items, selected]
+  );
   const runSiteKey = selectedItems[0]?.site_key;
   const sameSite = selectedItems.every((c) => c.site_key === runSiteKey);
   const canRunSelected = selectedItems.length > 0 && sameSite;
@@ -125,16 +131,15 @@ export default function Credentials() {
     navigate(`/runs/${run.id}`);
   };
 
-  // Total counts (used in tabs)
-  const siteCounts = sites.reduce((acc, s) => {
-    acc[s.key] = items.filter((c) => c.site_key === s.key).length;
-    return acc;
-  }, {});
-  // Visible counts (used in run dialog so "Test all" reflects current filter/search)
-  const visibleSiteCounts = sites.reduce((acc, s) => {
-    acc[s.key] = filtered.filter((c) => c.site_key === s.key).length;
-    return acc;
-  }, {});
+  // Compute both site-count maps in a single pass over `items` instead of
+  // sites.length × items.length filters.
+  const { siteCounts, visibleSiteCounts } = React.useMemo(() => {
+    const total = {};
+    const visible = {};
+    for (const c of items) total[c.site_key] = (total[c.site_key] || 0) + 1;
+    for (const c of filtered) visible[c.site_key] = (visible[c.site_key] || 0) + 1;
+    return { siteCounts: total, visibleSiteCounts: visible };
+  }, [items, filtered]);
 
   // Aggregator quick-test: any site with secondary_site_keys can route creds to a chosen underlying site
   const openQuickRun = (aggregator, targetKey) => {

@@ -72,16 +72,14 @@ export default function Settings() {
         title="Settings"
         description="Sites, proxies, and browser defaults. API tokens are stored server-side as secrets."
         actions={
-          sites.length === 0 ? (
-            <Button
-              size="sm" variant="outline" className="gap-2"
-              onClick={() => seedMut.mutate()}
-              disabled={seedMut.isPending}
-              title="Creates a starter set of sites (Joe, Ignition, PPSR, Double) so you can start testing immediately."
-            >
-              <Sparkles className="h-3.5 w-3.5" /> {seedMut.isPending ? "Seeding…" : "Seed default sites"}
-            </Button>
-          ) : null
+          <Button
+            size="sm" variant="outline" className="gap-2"
+            onClick={() => seedMut.mutate()}
+            disabled={seedMut.isPending}
+            title="Creates the starter sites (Joe, Ignition, PPSR, Double). Existing sites are skipped — safe to re-run any time."
+          >
+            <Sparkles className="h-3.5 w-3.5" /> {seedMut.isPending ? "Seeding…" : sites.length === 0 ? "Seed default sites" : "Re-seed missing"}
+          </Button>
         }
       />
 

@@ -35,7 +35,7 @@ export default function Layout() {
           </div>
           <div>
             <div className="text-sm font-semibold">Credential Tester</div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">browserless · v3</div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">browserless</div>
           </div>
         </div>
         <nav className="flex-1 p-2 space-y-1">

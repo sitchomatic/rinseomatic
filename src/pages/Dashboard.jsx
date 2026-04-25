@@ -21,7 +21,10 @@ export default function Dashboard() {
   const { data: runs = [] } = useQuery({
     queryKey: ["test-runs"],
     queryFn: () => base44.entities.TestRun.list("-created_date", 50),
-    refetchInterval: 5000,
+    refetchInterval: (q) => {
+      const list = q.state.data || [];
+      return list.some((r) => r.status === "running" || r.status === "queued") ? 5000 : false;
+    },
   });
 
   const total = credentials.length;

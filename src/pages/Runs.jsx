@@ -14,7 +14,12 @@ export default function Runs() {
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["test-runs"],
     queryFn: () => base44.entities.TestRun.list("-created_date", 200),
-    refetchInterval: 3000,
+    // Only poll while there's at least one active run on screen.
+    refetchInterval: (q) => {
+      const list = q.state.data || [];
+      const anyActive = list.some((r) => r.status === "running" || r.status === "queued");
+      return anyActive ? 3000 : false;
+    },
   });
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],

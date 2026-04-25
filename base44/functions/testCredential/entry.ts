@@ -302,15 +302,15 @@ Deno.serve(async (req) => {
 
     const proxy = await resolveProxy(base44, runProxy, settings);
 
-    const results = [];
-    for (const s of testSites) {
+    // Run all target sites in parallel. For aggregator credentials this halves
+    // wall-clock time vs sequential execution. Single-site runs are unaffected.
+    const results = await Promise.all(testSites.map(async (s) => {
       const loginUrl = custom_url || s.login_url;
       if (!loginUrl) {
-        results.push({ site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 });
-        continue;
+        return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
       }
-      results.push(await runBrowserless(settings, proxy, s, loginUrl, username, passwords, strategy));
-    }
+      return await runBrowserless(settings, proxy, s, loginUrl, username, passwords, strategy);
+    }));
 
     if (results.length === 1) {
       const r = results[0];

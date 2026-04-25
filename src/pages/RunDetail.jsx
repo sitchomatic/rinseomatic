@@ -25,7 +25,12 @@ export default function RunDetail() {
   const { data: run, isLoading: runLoading, isError: runError } = useQuery({
     queryKey: ["test-run", id],
     queryFn: async () => (await base44.entities.TestRun.filter({ id }))[0] || null,
-    refetchInterval: 2000,
+    // Poll while active. Once the run reaches a terminal state, stop polling
+    // (saves ~30 requests/min per open tab indefinitely).
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === "running" || s === "queued" ? 2000 : false;
+    },
     enabled: !!id,
   });
 

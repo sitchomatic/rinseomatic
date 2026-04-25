@@ -3,16 +3,25 @@ import SiteChip from "@/components/shared/SiteChip";
 import { cn } from "@/lib/utils";
 
 export default function SiteBreakdown({ sites, credentials }) {
-  const rows = (sites || []).map((s) => {
-    const items = credentials.filter((c) => c.site_key === s.key);
-    const total = items.length;
-    const working = items.filter((c) => c.status === "working").length;
-    const failed = items.filter((c) => c.status === "failed").length;
-    const error = items.filter((c) => c.status === "error").length;
-    const untested = items.filter((c) => !c.status || c.status === "untested").length;
-    const pct = total ? Math.round((working / total) * 100) : 0;
-    return { site: s, total, working, failed, error, untested, pct };
-  }).sort((a, b) => b.total - a.total);
+  // L11 fix: single-pass tally bucketed by site_key. Was O(sites × creds × 4)
+  // — for 4 sites × 10k creds that's 160k checks per render. Now 10k.
+  const rows = React.useMemo(() => {
+    const tally = new Map(); // site_key → counters
+    for (const s of sites || []) tally.set(s.key, { site: s, total: 0, working: 0, failed: 0, error: 0, untested: 0 });
+    for (const c of credentials || []) {
+      const t = tally.get(c.site_key);
+      if (!t) continue; // credential references a deleted site — skip
+      t.total++;
+      if (c.status === "working") t.working++;
+      else if (c.status === "failed") t.failed++;
+      else if (c.status === "error") t.error++;
+      else t.untested++;
+    }
+    const arr = Array.from(tally.values());
+    for (const r of arr) r.pct = r.total ? Math.round((r.working / r.total) * 100) : 0;
+    arr.sort((a, b) => b.total - a.total);
+    return arr;
+  }, [sites, credentials]);
 
   if (rows.length === 0) {
     return (

@@ -6,15 +6,22 @@ import { Play } from "lucide-react";
 // Lets the user kick off a run that targets ONE specific underlying site (e.g.
 // "test Double creds against Joe only").
 export default function AggregatorQuickTest({ sites, siteCounts, onQuickRun }) {
-  const aggregators = (sites || []).filter(
-    (s) => Array.isArray(s.secondary_site_keys) && s.secondary_site_keys.length > 0
-  );
-  if (aggregators.length === 0) return null;
+  // L19 + L22: memoize aggregator filtering and build an O(1) label index.
+  // Was running on every parent re-render (Credentials page polls + filters
+  // constantly while a run is active).
+  const { visible, labelFor } = React.useMemo(() => {
+    const byKey = Object.fromEntries((sites || []).map((s) => [s.key, s]));
+    const aggregators = (sites || []).filter(
+      (s) => Array.isArray(s.secondary_site_keys) && s.secondary_site_keys.length > 0
+    );
+    const visible = aggregators.filter((agg) => (siteCounts?.[agg.key] || 0) > 0);
+    return {
+      visible,
+      labelFor: (key) => byKey[key]?.label || key,
+    };
+  }, [sites, siteCounts]);
 
-  const visible = aggregators.filter((agg) => (siteCounts?.[agg.key] || 0) > 0);
   if (visible.length === 0) return null;
-
-  const labelFor = (key) => sites.find((s) => s.key === key)?.label || key;
 
   return (
     <div className="mb-5 space-y-2">

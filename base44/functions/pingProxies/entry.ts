@@ -75,7 +75,10 @@ Deno.serve(async (req) => {
     const proxies = await base44.asServiceRole.entities.Proxy.list('-created_date', 200);
     const targets = proxies.filter((p) => p.enabled !== false && p.host && p.port);
 
-    const results = await Promise.all(targets.map(async (p) => {
+    // L15 fix: use allSettled so a single timed-out ping no longer holds up
+    // results for healthy proxies. Persist updates fire-and-forget in the
+    // same wave (we already await the ping itself).
+    const results = await Promise.allSettled(targets.map(async (p) => {
       const r = await pingOne(token, region, p);
       const status = classify(r.ok, r.latency);
       await base44.asServiceRole.entities.Proxy.update(p.id, {
@@ -84,7 +87,10 @@ Deno.serve(async (req) => {
         last_check: new Date().toISOString(),
       });
       return { id: p.id, label: p.label || `${p.host}:${p.port}`, status, latency_ms: r.latency, error: r.error };
-    }));
+    })).then((settled) => settled.map((s, i) => s.status === 'fulfilled'
+      ? s.value
+      : { id: targets[i].id, label: targets[i].label || `${targets[i].host}:${targets[i].port}`, status: 'down', error: s.reason?.message }
+    ));
 
     return Response.json({ checked: results.length, results });
   } catch (error) {

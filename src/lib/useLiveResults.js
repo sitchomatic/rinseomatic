@@ -9,11 +9,19 @@ export function useLiveResults(runId) {
   const qc = useQueryClient();
   const key = ["test-results", runId];
 
-  // B2: Once a run reaches a terminal state, results don't change — we never
-  // need to refetch on remount. Active runs use 30s staleTime + the live
-  // subscription below for freshness. We only know terminality from the run
-  // entity (held in a sibling query), so we reach into the cache for it.
-  const runStatus = qc.getQueryData(["test-run", runId])?.status;
+  // L13 fix: subscribe to the sibling run-status query so `isTerminal` is
+  // reactive. Previous code read it once at hook-call time, so a run that
+  // completed during the user's session would still refetch results on
+  // remount. `useQuery` on the same key gives us live status without
+  // duplicating the network request.
+  const { data: runForStatus } = useQuery({
+    queryKey: ["test-run", runId],
+    queryFn: async () => (await base44.entities.TestRun.filter({ id: runId }))[0] || null,
+    enabled: !!runId,
+    staleTime: 1_000, // sibling RunDetail query owns the polling
+    refetchOnMount: false,
+  });
+  const runStatus = runForStatus?.status;
   const isTerminal = runStatus === "completed" || runStatus === "failed" || runStatus === "cancelled";
 
   const query = useQuery({

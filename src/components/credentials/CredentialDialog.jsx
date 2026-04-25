@@ -11,13 +11,17 @@ export default function CredentialDialog({ open, onOpenChange, sites, onSubmit }
   const [extra, setExtra] = React.useState("");
   const [touched, setTouched] = React.useState({});
 
+  // L17 fix: reset ONLY when the dialog opens, never when `sites` reference
+  // changes mid-edit (parent re-renders pass a fresh array each time, which
+  // wiped user input). Read the latest sites via a ref.
+  const sitesRef = React.useRef(sites);
+  sitesRef.current = sites;
   React.useEffect(() => {
-    if (open) {
-      setForm({ username: "", password: "", site_key: sites?.[0]?.key || "", extra_passwords: [] });
-      setExtra("");
-      setTouched({});
-    }
-  }, [open, sites]);
+    if (!open) return;
+    setForm({ username: "", password: "", site_key: sitesRef.current?.[0]?.key || "", extra_passwords: [] });
+    setExtra("");
+    setTouched({});
+  }, [open]);
 
   const errors = {
     username: !form.username.trim() ? "Username or email is required." : null,

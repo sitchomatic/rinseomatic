@@ -26,7 +26,18 @@ const ERROR_TONE = {
 };
 
 export default function ResultsTable({ results }) {
-  if (!results || results.length === 0) {
+  // L12 fix: pre-parse error tags ONCE per result list, not on every render.
+  // Worst case (5k results, 10 streaming updates/sec) goes from 50k regex
+  // executions per second to 5k once.
+  const decorated = React.useMemo(() => {
+    if (!results) return [];
+    return results.map((r) => {
+      const { label, message } = splitErrorTag(r.error_message);
+      return { row: r, label, message, tone: label ? ERROR_TONE[label] : null };
+    });
+  }, [results]);
+
+  if (decorated.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card/40 py-14 text-center text-sm text-muted-foreground">
         No results yet.
@@ -43,28 +54,24 @@ export default function ResultsTable({ results }) {
         <div>Elapsed</div>
       </div>
       <div className="divide-y divide-border/60 max-h-[540px] overflow-y-auto thin-scroll">
-        {results.map((r) => {
-          const { label, message } = splitErrorTag(r.error_message);
-          const tone = label && ERROR_TONE[label];
-          return (
-            <div key={r.id} className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono">
-              <div className="truncate">{r.username}</div>
-              <div><StatusPill status={r.status} /></div>
-              <div className="text-muted-foreground">{r.attempts || 0}</div>
-              <div className="truncate text-muted-foreground flex items-center gap-2 min-w-0">
-                {label && (
-                  <span className={`shrink-0 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${tone || "text-muted-foreground border-border bg-secondary/40"}`}>
-                    {label}
-                  </span>
-                )}
-                <span className="truncate">
-                  {message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
+        {decorated.map(({ row: r, label, message, tone }) => (
+          <div key={r.id} className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono">
+            <div className="truncate">{r.username}</div>
+            <div><StatusPill status={r.status} /></div>
+            <div className="text-muted-foreground">{r.attempts || 0}</div>
+            <div className="truncate text-muted-foreground flex items-center gap-2 min-w-0">
+              {label && (
+                <span className={`shrink-0 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${tone || "text-muted-foreground border-border bg-secondary/40"}`}>
+                  {label}
                 </span>
-              </div>
-              <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
+              )}
+              <span className="truncate">
+                {message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
+              </span>
             </div>
-          );
-        })}
+            <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin only' }, { status: 403 });
     }
 
-    const existing = await base44.asServiceRole.entities.Site.list('-created_date', 100);
-    const keys = new Set(existing.map((s) => s.key));
-    const toCreate = DEFAULT_SITES.filter((s) => !keys.has(s.key));
+    // L16 fix: only fetch the keys that matter (parallel filters), not the
+    // entire site list. Saves a full-table read for a 4-key existence check.
+    const checks = await Promise.all(
+      DEFAULT_SITES.map((s) => base44.asServiceRole.entities.Site.filter({ key: s.key }))
+    );
+    const toCreate = DEFAULT_SITES.filter((_, i) => checks[i].length === 0);
     if (toCreate.length > 0) {
       await base44.asServiceRole.entities.Site.bulkCreate(toCreate);
     }
-    return Response.json({ created: toCreate.length, existing: existing.length });
+    return Response.json({ created: toCreate.length, existing: DEFAULT_SITES.length - toCreate.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

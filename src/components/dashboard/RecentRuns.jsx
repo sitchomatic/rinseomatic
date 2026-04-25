@@ -7,7 +7,12 @@ import { formatMs } from "@/lib/sites";
 import { ArrowRight } from "lucide-react";
 
 export default function RecentRuns({ runs, sites }) {
-  const siteLabel = (k) => sites.find((s) => s.key === k)?.label || k;
+  // L14 fix: O(1) site label lookup via index instead of `.find` per row.
+  const siteByKey = React.useMemo(
+    () => Object.fromEntries((sites || []).map((s) => [s.key, s])),
+    [sites]
+  );
+  const siteLabel = (k) => siteByKey[k]?.label || k;
 
   if (!runs || runs.length === 0) {
     return (

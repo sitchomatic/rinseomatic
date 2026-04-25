@@ -63,10 +63,17 @@ export default function RunDetail() {
 
   // Delete run + cascade the result rows. Terminal-only — for active runs
   // the user cancels first.
+  // L10 fix: chunked delete (matches L8 in Credentials). 5000 simultaneous
+  // DELETEs would saturate the connection pool; 25-at-a-time with sequential
+  // batches survives the largest realistic run.
   const deleteMut = useMutation({
     mutationFn: async () => {
-      const all = await base44.entities.TestResult.filter({ run_id: id }, "-created_date", 5000);
-      await Promise.all(all.map((r) => base44.entities.TestResult.delete(r.id)));
+      const all = await base44.entities.TestResult.filter({ run_id: id }, "-created_date", 10000);
+      const CHUNK = 25;
+      for (let i = 0; i < all.length; i += CHUNK) {
+        const batch = all.slice(i, i + CHUNK);
+        await Promise.all(batch.map((r) => base44.entities.TestResult.delete(r.id)));
+      }
       await base44.entities.TestRun.delete(id);
     },
     onSuccess: () => {

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Network, Pencil, X, Activity, Loader2 } from "lucide-react";
+import { Plus, Trash2, Network, Pencil, X, Activity, Loader2, Shield, CheckCircle2, XCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -44,6 +45,27 @@ export default function ExternalProxiesManager({ proxies = [] }) {
       toast.success(`Pinged ${data?.checked ?? 0} prox${(data?.checked ?? 0) === 1 ? "y" : "ies"}`);
     },
     onError: (e) => toast.error(e?.response?.data?.error || e.message),
+  });
+
+  const [wgResult, setWgResult] = React.useState(null); // { id, ok, msg }
+  const wgTestMut = useMutation({
+    mutationFn: (id) => base44.functions.invoke("testWireguardProxy", { proxy_id: id }),
+    onSuccess: (res, id) => {
+      const data = res?.data || res;
+      qc.invalidateQueries({ queryKey: ["proxies"] });
+      if (data?.ok) {
+        setWgResult({ id, ok: true, msg: `Endpoint reachable (${data.probe?.latency_ms}ms) · ${data.parsed?.host}:${data.parsed?.port}` });
+        toast.success("WireGuard endpoint reachable");
+      } else {
+        setWgResult({ id, ok: false, msg: data?.error || "Test failed" });
+        toast.error(data?.error || "WireGuard test failed");
+      }
+    },
+    onError: (e, id) => {
+      const msg = e?.response?.data?.error || e.message;
+      setWgResult({ id, ok: false, msg });
+      toast.error(msg);
+    },
   });
 
   return (
@@ -106,9 +128,31 @@ export default function ExternalProxiesManager({ proxies = [] }) {
                 )}
               </div>
               <div className="text-[11px] font-mono text-muted-foreground truncate">
-                {p.protocol}://{p.username ? `${p.username}:•••@` : ""}{p.host}:{p.port}{p.region ? ` · ${p.region}` : ""}
+                {p.protocol === "wireguard" ? (
+                  <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> wireguard · {p.host || "—"}{p.region ? ` · ${p.region}` : ""}</span>
+                ) : (
+                  <>{p.protocol}://{p.username ? `${p.username}:•••@` : ""}{p.host}:{p.port}{p.region ? ` · ${p.region}` : ""}</>
+                )}
               </div>
+              {wgResult && wgResult.id === p.id && (
+                <div className={cn("text-[10px] font-mono mt-1 flex items-center gap-1", wgResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                  {wgResult.ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />} {wgResult.msg}
+                </div>
+              )}
             </div>
+            {p.protocol === "wireguard" && (
+              <Button
+                variant="ghost" size="sm" className="gap-1.5"
+                onClick={() => wgTestMut.mutate(p.id)}
+                disabled={wgTestMut.isPending}
+                title="Validate the WireGuard config and probe endpoint reachability"
+              >
+                {wgTestMut.isPending && wgTestMut.variables === p.id
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Shield className="h-3 w-3" />}
+                Test
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setDraft(p)} title="Load this proxy into the form below for editing">
               <Pencil className="h-3 w-3" /> Edit
             </Button>
@@ -139,13 +183,14 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           <F label="Region" help="Informational tag (e.g. AU, US-East). Not used for routing.">
             <Input value={draft.region || ""} onChange={(e) => setDraft({ ...draft, region: e.target.value })} placeholder="AU" />
           </F>
-          <F label="Protocol" help="Must match what your proxy provider supports.">
+          <F label="Protocol" help="Must match what your proxy provider supports. WireGuard entries are tested for endpoint reachability only — Browserless can't terminate WireGuard natively.">
             <Select value={draft.protocol || "http"} onValueChange={(v) => setDraft({ ...draft, protocol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="http">HTTP</SelectItem>
                 <SelectItem value="https">HTTPS</SelectItem>
                 <SelectItem value="socks5">SOCKS5</SelectItem>
+                <SelectItem value="wireguard">WireGuard / NordLynx</SelectItem>
               </SelectContent>
             </Select>
           </F>
@@ -161,6 +206,19 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           <F label="Password" help="Stored as-is; sent to Browserless over HTTPS.">
             <Input type="password" value={draft.password || ""} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="optional" />
           </F>
+          {draft.protocol === "wireguard" && (
+            <div className="col-span-2">
+              <F label="WireGuard config (.conf)" help="Paste the full NordLynx / WireGuard config — including [Interface] PrivateKey, Address, and [Peer] PublicKey, Endpoint, AllowedIPs.">
+                <Textarea
+                  value={draft.wireguard_config || ""}
+                  onChange={(e) => setDraft({ ...draft, wireguard_config: e.target.value })}
+                  rows={8}
+                  className="font-mono text-[11px]"
+                  placeholder={"[Interface]\nPrivateKey = ...\nAddress = 10.5.0.2/32\nDNS = 103.86.96.100\n\n[Peer]\nPublicKey = ...\nEndpoint = au123.nordvpn.com:51820\nAllowedIPs = 0.0.0.0/0"}
+                />
+              </F>
+            </div>
+          )}
           <div className="flex items-end justify-between gap-2">
             <label className="flex flex-col gap-1 text-xs">
               <span>Enabled</span>

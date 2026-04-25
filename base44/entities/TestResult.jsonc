@@ -45,6 +45,15 @@
     "tested_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "live_url": {
+      "type": "string",
+      "description": "Browserless live-view URL while this row is being tested. Cleared on completion."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the worker last picked up this row (used to detect stuck rows)."
     }
   },
   "required": [

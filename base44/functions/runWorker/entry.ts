@@ -187,12 +187,15 @@ Deno.serve(async (req) => {
 
     // A1: Claim by transitioning queued → running in one pass. The cron is now
     // the only writer (client-side leader removed in D9), so the prior double-
-    // read defensive check is dead code.
+    // read defensive check is dead code. We also stamp `started_at` so the
+    // auto-heal job can detect rows pinned in 'running' for too long.
     const claimable = queued;
+    const claimedAt = new Date().toISOString();
     await Promise.all(claimable.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
         status: 'running',
         attempts: (r.attempts || 0) + 1,
+        started_at: claimedAt,
       })
     ));
 
@@ -225,6 +228,7 @@ Deno.serve(async (req) => {
         error_message: taggedMessage,
         elapsed_ms: o.elapsed_ms || 0,
         tested_at: new Date().toISOString(),
+        live_url: null, // clear live-view URL on completion
       });
       // Per-credential status mirroring removed — credentials are now global
       // (no per-site status). Per-(credential, site) outcomes live in TestResult.

@@ -11,6 +11,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatusPill from "@/components/shared/StatusPill";
 import SiteChip from "@/components/shared/SiteChip";
 import ResultsTable from "@/components/runs/ResultsTable";
+import LiveSessionsPanel from "@/components/runs/LiveSessionsPanel";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { formatMs } from "@/lib/sites";
 import { runEta, formatEta } from "@/lib/eta";
@@ -195,6 +196,8 @@ export default function RunDetail() {
       <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-6">
         <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
+
+      <LiveSessionsPanel results={results} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-card border border-border mb-4">

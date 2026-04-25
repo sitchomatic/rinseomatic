@@ -29,6 +29,10 @@
       "type": "string",
       "description": "Optional proxy auth password"
     },
+    "wireguard_config": {
+      "type": "string",
+      "description": "Full NordLynx / WireGuard .conf file contents (PrivateKey, PublicKey, Endpoint, AllowedIPs). Used only when protocol = 'wireguard'."
+    },
     "region": {
       "type": "string"
     },
@@ -48,6 +52,14 @@
     "last_check": {
       "type": "string",
       "format": "date-time"
+    },
+    "last_ip": {
+      "type": "string",
+      "description": "Last public IP observed when pinging this proxy."
+    },
+    "last_country": {
+      "type": "string",
+      "description": "Last country code observed when pinging this proxy."
     },
     "rotation_weight": {
       "type": "number",

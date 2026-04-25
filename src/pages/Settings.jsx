@@ -9,6 +9,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel";
 import ExternalProxiesManager from "@/components/settings/ExternalProxiesManager";
+import DiagnosticsPanel from "@/components/settings/DiagnosticsPanel";
 import SiteSandbox from "@/components/settings/SiteSandbox";
 import { Plus, Trash2, Sparkles, Pencil, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
@@ -89,6 +90,7 @@ export default function Settings() {
 
       <div className="space-y-6 mb-8">
         <ProxySettingsPanel proxies={proxies} />
+        <DiagnosticsPanel />
         <ExternalProxiesManager proxies={proxies} />
       </div>
 

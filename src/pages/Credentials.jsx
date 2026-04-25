@@ -34,6 +34,7 @@ export default function Credentials() {
   const { data: sites = [], isLoading: sitesLoading } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+    staleTime: 5 * 60_000, // L9: align with Dashboard/Settings — sites change rarely
   });
 
   const { data: items = [], isLoading: itemsLoading } = useQuery({
@@ -54,8 +55,19 @@ export default function Credentials() {
     mutationFn: (id) => base44.entities.Credential.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["credentials"] }),
   });
+  // L8 fix: chunked bulk delete. Firing 1000 simultaneous DELETE requests
+  // would saturate the connection pool and trigger rate limits. 25-at-a-time
+  // is the sweet spot — fast enough to feel instant on small selections,
+  // backpressured enough to survive 5k-row deletes.
   const bulkDeleteMut = useMutation({
-    mutationFn: async (ids) => { await Promise.all(ids.map((id) => base44.entities.Credential.delete(id))); return ids.length; },
+    mutationFn: async (ids) => {
+      const CHUNK = 25;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const batch = ids.slice(i, i + CHUNK);
+        await Promise.all(batch.map((id) => base44.entities.Credential.delete(id)));
+      }
+      return ids.length;
+    },
     onSuccess: (n) => {
       qc.invalidateQueries({ queryKey: ["credentials"] });
       setSelected(new Set());
@@ -82,12 +94,29 @@ export default function Credentials() {
   });
   const toggleAll = () => setSelected((s) => s.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)));
 
-  const selectedItems = React.useMemo(
-    () => items.filter((c) => selected.has(c.id)),
-    [items, selected]
-  );
-  const runSiteKey = selectedItems[0]?.site_key;
-  const sameSite = selectedItems.every((c) => c.site_key === runSiteKey);
+  // L6 + L7 fix: O(k) lookup via id index instead of O(n) filter on each
+  // selection toggle, AND derive sameSite/runSiteKey in the same pass so
+  // we never iterate twice. k = selection size, n = full vault size.
+  const itemsById = React.useMemo(() => {
+    const m = new Map();
+    for (const c of items) m.set(c.id, c);
+    return m;
+  }, [items]);
+
+  const { selectedItems, runSiteKey, sameSite } = React.useMemo(() => {
+    const list = [];
+    let firstSite;
+    let same = true;
+    for (const id of selected) {
+      const c = itemsById.get(id);
+      if (!c) continue;
+      list.push(c);
+      if (firstSite === undefined) firstSite = c.site_key;
+      else if (c.site_key !== firstSite) same = false;
+    }
+    return { selectedItems: list, runSiteKey: firstSite, sameSite: same };
+  }, [itemsById, selected]);
+
   const canRunSelected = selectedItems.length > 0 && sameSite;
 
   const startRun = async (opts) => {

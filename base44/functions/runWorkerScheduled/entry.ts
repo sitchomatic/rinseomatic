@@ -9,9 +9,9 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// MAX_PARALLEL_RUNS: hard ceiling on Browserless fan-out per cron tick.
+// MAX_PARALLEL_RUNS: hard ceiling on ScrapingBee fan-out per cron tick.
 // Beyond this, queued runs simply wait until the next tick. Keeps us from
-// stampeding our Browserless quota when 50 runs are simultaneously in flight.
+// stampeding our ScrapingBee quota when 50 runs are simultaneously in flight.
 const MAX_PARALLEL_RUNS = 10;
 
 Deno.serve(async (req) => {

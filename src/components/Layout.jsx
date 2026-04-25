@@ -38,7 +38,7 @@ export default function Layout() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold">Credential Tester</div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">browserless</div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">scrapingbee</div>
           </div>
           <ThemeToggle />
         </div>

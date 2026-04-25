@@ -1,51 +1,26 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// Pings each enabled external Proxy through Browserless to measure
+// Pings each enabled external Proxy via direct TCP connect to measure
 // reachability + latency. Updates Proxy.status / latency_ms / last_check.
 // Designed to be called either manually (from the Settings UI) or on a
 // daily schedule.
+//
+// Previously used Browserless, but the app now routes external proxies to
+// ScrapingBee via own_proxy. A direct TCP probe is faster, cheaper, and
+// matches the approach used in testWireguardProxy.
 
-async function pingOne(token, region, proxy) {
-  // D3 fix: route the request through the actual proxy by passing
-  // externalProxyServer as a Browserless query param (matches testCredential).
-  // Previously this was passed in `context` and silently ignored, so the ping
-  // was measuring Browserless→ipify on the default datacenter IP.
-  const scheme = proxy.protocol || 'http';
-  const auth = proxy.username
-    ? `${encodeURIComponent(proxy.username)}${proxy.password ? `:${encodeURIComponent(proxy.password)}` : ''}@`
-    : '';
-  const externalProxyServer = `${scheme}://${auth}${proxy.host}:${proxy.port}`;
-
-  const params = new URLSearchParams({ token });
-  params.set('externalProxyServer', externalProxyServer);
-  const url = `https://${region}.browserless.io/function?${params.toString()}`;
-
-  const code = `
-    export default async ({ page }) => {
-      const started = Date.now();
-      try {
-        const res = await page.goto('https://api.ipify.org?format=json', { waitUntil: 'domcontentloaded', timeout: 15000 });
-        const ok = res && res.ok();
-        const elapsed = Date.now() - started;
-        return { data: { ok, elapsed }, type: 'application/json' };
-      } catch (e) {
-        return { data: { ok: false, error: e.message, elapsed: Date.now() - started }, type: 'application/json' };
-      }
-    };
-  `;
-
+async function tcpProbe(host, port, timeoutMs = 5000) {
   const started = Date.now();
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    const elapsed = Date.now() - started;
-    if (!res.ok) return { ok: false, latency: elapsed, error: `Browserless ${res.status}` };
-    const json = await res.json();
-    const data = json?.data || json;
-    return { ok: !!data.ok, latency: data.elapsed ?? elapsed, error: data.error };
+    const conn = await Promise.race([
+      Deno.connect({ hostname: host, port: Number(port), transport: 'tcp' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+    ]);
+    if (conn) {
+      try { conn.close(); } catch (_) {}
+      return { ok: true, latency: Date.now() - started };
+    }
+    return { ok: false, latency: Date.now() - started, error: 'no connection' };
   } catch (e) {
     return { ok: false, latency: Date.now() - started, error: e.message };
   }
@@ -61,25 +36,26 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch(() => null);
-    // Allow scheduled invocation (no user) and authenticated UI invocation
+    // Allow scheduled invocation (no user) and authenticated UI invocation.
     if (req.headers.get('x-base44-trigger') !== 'scheduled' && !user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const token = Deno.env.get('BROWSERLESS_TOKEN');
-    if (!token) return Response.json({ error: 'BROWSERLESS_TOKEN not set' }, { status: 500 });
-
-    const settings = (await base44.asServiceRole.entities.AppSettings.list('-created_date', 1))[0] || {};
-    const region = settings.browserless_region || 'production-sfo';
-
     const proxies = await base44.asServiceRole.entities.Proxy.list('-created_date', 200);
-    const targets = proxies.filter((p) => p.enabled !== false && p.host && p.port);
+    // WireGuard entries have their own dedicated tester (testWireguardProxy)
+    // that parses the .conf file. Skip them here so we don't false-flag them
+    // as "down" via a TCP probe to a UDP-only endpoint.
+    const targets = proxies.filter(
+      (p) => p.enabled !== false && p.host && p.port && p.protocol !== 'wireguard'
+    );
 
-    // L15 fix: use allSettled so a single timed-out ping no longer holds up
-    // results for healthy proxies. Persist updates fire-and-forget in the
-    // same wave (we already await the ping itself).
+    if (targets.length === 0) {
+      return Response.json({ checked: 0, results: [] });
+    }
+
+    // allSettled so a single timed-out proxy doesn't hold up the rest.
     const results = await Promise.allSettled(targets.map(async (p) => {
-      const r = await pingOne(token, region, p);
+      const r = await tcpProbe(p.host, p.port, 5000);
       const status = classify(r.ok, r.latency);
       await base44.asServiceRole.entities.Proxy.update(p.id, {
         status,

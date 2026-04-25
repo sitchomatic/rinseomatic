@@ -1,6 +1,7 @@
 import React from "react";
 import StatusPill from "@/components/shared/StatusPill";
 import { formatMs } from "@/lib/sites";
+import ScreenshotPreview from "@/components/runs/ScreenshotPreview";
 
 // Pull the "[Class] " tag out of error messages saved by the worker (D1).
 // Returns { label, message } where label may be null.
@@ -46,18 +47,19 @@ export default function ResultsTable({ results }) {
   }
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 border-b border-border bg-secondary/40 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[minmax(0,2fr)_110px_80px_minmax(0,3fr)_70px_80px] gap-3 px-4 py-2.5 border-b border-border bg-secondary/40 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
         <div>Username</div>
         <div>Status</div>
         <div>Attempts</div>
         <div>Detail</div>
+        <div>Shot</div>
         <div>Elapsed</div>
       </div>
       <div className="divide-y divide-border/60 max-h-[540px] overflow-y-auto thin-scroll">
         {decorated.map(({ row: r, label, message, tone }, i) => (
           <div
             key={r.id}
-            className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono animate-row-in"
+            className="grid grid-cols-[minmax(0,2fr)_110px_80px_minmax(0,3fr)_70px_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono animate-row-in"
             style={{ animationDelay: `${Math.min(i * 8, 200)}ms` }}
           >
             <div className="truncate">{r.username}</div>
@@ -73,6 +75,7 @@ export default function ResultsTable({ results }) {
                 {message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
               </span>
             </div>
+            <div><ScreenshotPreview url={r.screenshot_url} username={r.username} /></div>
             <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
           </div>
         ))}

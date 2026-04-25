@@ -242,7 +242,27 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   }
 
   const verdict = classify(site, json);
-  return { ...verdict, elapsed, screenshot: json.screenshot || null };
+  return { ...verdict, elapsed, screenshot_b64: json.screenshot || null };
+}
+
+// Upload a base64 screenshot returned by ScrapingBee (json.screenshot) and
+// return a public file URL. Returns null on any failure — screenshots are
+// best-effort, never block the test result.
+async function uploadScreenshot(base44, b64, site_key, username) {
+  try {
+    if (!b64) return null;
+    // ScrapingBee returns raw base64 (no data: prefix). Decode → Blob → upload.
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const safeUser = (username || 'user').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+    const file = new File([blob], `${site_key}-${safeUser}-${Date.now()}.png`, { type: 'image/png' });
+    const res = await base44.integrations.Core.UploadFile({ file });
+    return res?.file_url || null;
+  } catch (_e) {
+    return null;
+  }
 }
 
 // ------------ Per-site test (handles password strategy) ------------
@@ -251,10 +271,15 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
   let lastFailed = null;
   let lastError = null;
   let totalElapsed = 0;
+  // Track the final-attempt screenshot — we only persist one per credential
+  // to keep file storage tidy. Working > failed > error precedence is implicit
+  // because we return early on 'working'.
+  let lastScreenshot = null;
 
   for (const pw of list) {
     const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw);
     totalElapsed += r.elapsed || 0;
+    if (r.screenshot_b64) lastScreenshot = r.screenshot_b64;
 
     if (r.status === 'working') {
       return {
@@ -264,6 +289,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
         success_marker_found: !!r.marker,
         working_password: pw,
         elapsed_ms: totalElapsed,
+        screenshot_b64: r.screenshot_b64 || null,
       };
     }
     if (r.status === 'error') {
@@ -282,6 +308,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
       final_url: lastFailed.final_url,
       success_marker_found: false,
       elapsed_ms: totalElapsed,
+      screenshot_b64: lastScreenshot,
     };
   }
   return {
@@ -289,6 +316,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
     status: 'error',
     error_message: lastError || 'unknown error',
     elapsed_ms: totalElapsed,
+    screenshot_b64: lastScreenshot,
   };
 }
 
@@ -395,6 +423,14 @@ Deno.serve(async (req) => {
       return r;
     }));
 
+    // Upload screenshots in parallel (best-effort, never blocks). We pick the
+    // first non-null b64 across all per-site results — there's only ever one
+    // ScrapingBee request per site so at most one screenshot per site anyway.
+    const screenshotB64 = results.find((r) => r.screenshot_b64)?.screenshot_b64 || null;
+    const screenshotUrl = settings.capture_screenshots
+      ? await uploadScreenshot(base44, screenshotB64, site_key, username)
+      : null;
+
     if (results.length === 1) {
       const r = results[0];
       return Response.json({
@@ -404,9 +440,10 @@ Deno.serve(async (req) => {
         working_password: r.working_password,
         error_message: r.error_message,
         elapsed_ms: r.elapsed_ms,
+        screenshot_url: screenshotUrl,
       });
     }
-    return Response.json(combine(results));
+    return Response.json({ ...combine(results), screenshot_url: screenshotUrl });
   } catch (error) {
     return Response.json({ status: 'error', error_message: error.message }, { status: 500 });
   }

@@ -54,6 +54,10 @@
       "type": "string",
       "format": "date-time",
       "description": "When the worker last picked up this row (used to detect stuck rows)."
+    },
+    "screenshot_url": {
+      "type": "string",
+      "description": "Final-state screenshot captured by ScrapingBee when capture_screenshots is enabled."
     }
   },
   "required": [

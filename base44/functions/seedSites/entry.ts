@@ -39,8 +39,8 @@ const DEFAULT_SITES = [
   },
   {
     key: 'double',
-    label: 'Double',
-    login_url: 'https://example.com/login',
+    label: 'Double (Joe + Ignition)',
+    login_url: '',
     username_selector: "input[type='email'], input[name='username']",
     password_selector: "input[type='password']",
     submit_selector: "button[type='submit']",
@@ -48,6 +48,8 @@ const DEFAULT_SITES = [
     login_url_marker: '/login',
     wait_after_submit_ms: 3500,
     enabled: true,
+    secondary_site_keys: ['joe', 'ignition'],
+    skip_primary: true,
   },
 ];
 

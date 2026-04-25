@@ -105,15 +105,22 @@ export default function Credentials() {
       pending_count: creds.length,
     });
 
-    await base44.entities.TestResult.bulkCreate(
-      creds.map((c) => ({
-        run_id: run.id,
-        credential_id: c.id,
-        site_key: c.site_key,
-        username: c.username,
-        status: "queued",
-      }))
-    );
+    try {
+      await base44.entities.TestResult.bulkCreate(
+        creds.map((c) => ({
+          run_id: run.id,
+          credential_id: c.id,
+          site_key: c.site_key,
+          username: c.username,
+          status: "queued",
+        }))
+      );
+    } catch (e) {
+      // Bulk-create failed → don't leave an orphan run sitting in 'queued' forever.
+      try { await base44.entities.TestRun.delete(run.id); } catch (_) { /* best effort */ }
+      toast.error(`Couldn't queue credentials: ${e.message}`);
+      return;
+    }
     toast.success(`Run started · ${creds.length} credentials`);
     navigate(`/runs/${run.id}`);
   };

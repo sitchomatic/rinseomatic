@@ -67,7 +67,7 @@ export default function CsvImportDialog({ open, onOpenChange, sites, onImport })
 
       const explicitSite = siteIdx !== null ? r[siteIdx] : "";
       const url = urlIdx !== null ? r[urlIdx] : "";
-      const detected = detectSite(explicitSite, url, username);
+      const detected = detectSite(explicitSite, url, username, sites);
       const site_key = detected || fallbackSite;
       if (!site_key) { skipped++; continue; }
 

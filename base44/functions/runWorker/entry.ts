@@ -88,9 +88,12 @@ Deno.serve(async (req) => {
             tested_at: new Date().toISOString(),
           })
         ));
-        const working = active.filter((r) => r.status === 'working').length;
-        const failed = active.filter((r) => r.status === 'failed').length;
-        const errored = active.filter((r) => r.status === 'error').length + stuck.length;
+        // After updating `stuck` rows to 'error', re-count from the freshest
+        // snapshot to avoid double-counting them in `errored`.
+        const fresh = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
+        const working = fresh.filter((r) => r.status === 'working').length;
+        const failed = fresh.filter((r) => r.status === 'failed').length;
+        const errored = fresh.filter((r) => r.status === 'error').length;
         await base44.asServiceRole.entities.TestRun.update(run_id, {
           status: 'failed',
           ended_at: new Date().toISOString(),
@@ -145,7 +148,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    await Promise.all(queued.map((r) =>
+    // Re-read each row before claiming it. Another worker invocation may have
+    // already grabbed it (multi-tab leader handover, double-poll, etc.). If the
+    // row is no longer 'queued' we drop it from this batch — never double-test.
+    const claimChecks = await Promise.all(queued.map((r) =>
+      base44.asServiceRole.entities.TestResult.filter({ id: r.id })
+    ));
+    const claimable = queued.filter((r, i) => (claimChecks[i]?.[0]?.status === 'queued'));
+    if (claimable.length === 0) {
+      return Response.json({ done: false, processed: 0, skipped: queued.length });
+    }
+
+    await Promise.all(claimable.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
         status: 'running',
         attempts: (r.attempts || 0) + 1,
@@ -153,11 +167,11 @@ Deno.serve(async (req) => {
     ));
 
     // Execute in parallel
-    const outcomes = await Promise.all(queued.map((r) => testOne(base44, site, r, run)));
+    const outcomes = await Promise.all(claimable.map((r) => testOne(base44, site, r, run)));
 
     // Persist results + retry on error
     const maxRetries = run.max_retries ?? 1;
-    await Promise.all(queued.map(async (r, i) => {
+    await Promise.all(claimable.map(async (r, i) => {
       const o = outcomes[i];
       const attempts = (r.attempts || 0) + 1;
       const shouldRetry = o.status === 'error' && attempts <= maxRetries;
@@ -211,7 +225,7 @@ Deno.serve(async (req) => {
       } : {}),
     });
 
-    return Response.json({ done: isDone, processed: queued.length });
+    return Response.json({ done: isDone, processed: claimable.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

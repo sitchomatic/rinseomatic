@@ -41,13 +41,23 @@ export default function RunDetail() {
 
   const cancelMut = useMutation({
     mutationFn: async () => {
-      const queued = await base44.entities.TestResult.filter({ run_id: id, status: "queued" }, "-created_date", 5000);
-      await Promise.all(queued.map((r) => base44.entities.TestResult.update(r.id, { status: "error", error_message: "Cancelled" })));
+      // Cancel everything that hasn't reached a terminal state.
+      const all = await base44.entities.TestResult.filter({ run_id: id }, "-created_date", 5000);
+      const inFlight = all.filter((r) => r.status === "queued" || r.status === "running");
+      await Promise.all(inFlight.map((r) =>
+        base44.entities.TestResult.update(r.id, { status: "error", error_message: "Cancelled" })
+      ));
+      // Recount from the source of truth instead of relying on stale run counters.
+      const working = all.filter((r) => r.status === "working").length;
+      const failed = all.filter((r) => r.status === "failed").length;
+      const errored = all.filter((r) => r.status === "error").length + inFlight.length;
       await base44.entities.TestRun.update(id, {
         status: "cancelled",
         ended_at: new Date().toISOString(),
         pending_count: 0,
-        error_count: (run?.error_count || 0) + queued.length,
+        working_count: working,
+        failed_count: failed,
+        error_count: errored,
       });
     },
     onSuccess: () => {
@@ -83,7 +93,10 @@ export default function RunDetail() {
 
   const pct = run.total_count ? Math.round(((run.total_count - (run.pending_count || 0)) / run.total_count) * 100) : 0;
 
-  const filtered = tab === "all" ? results : results.filter((r) => r.status === tab);
+  const filtered =
+    tab === "all" ? results :
+    tab === "queued" ? results.filter((r) => r.status === "queued" || r.status === "running") :
+    results.filter((r) => r.status === tab);
 
   const exportCsv = () => {
     if (!results.length) return toast.error("No results to export");

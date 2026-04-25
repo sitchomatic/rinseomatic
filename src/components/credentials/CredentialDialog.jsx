@@ -52,7 +52,12 @@ export default function CredentialDialog({ open, onOpenChange, sites, onSubmit }
           </div>
           <div className="grid gap-2">
             <Label>Primary password</Label>
-            <Input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
           </div>
           <div className="grid gap-2">
             <Label className="flex items-center justify-between">
@@ -61,6 +66,8 @@ export default function CredentialDialog({ open, onOpenChange, sites, onSubmit }
             </Label>
             <div className="flex gap-2">
               <Input
+                type="password"
+                autoComplete="new-password"
                 value={extra}
                 onChange={(e) => setExtra(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }}

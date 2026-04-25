@@ -250,7 +250,6 @@ Deno.serve(async (req) => {
         error_message: taggedMessage,
         elapsed_ms: o.elapsed_ms || 0,
         tested_at: new Date().toISOString(),
-        live_url: null, // clear live-view URL on completion
         screenshot_url: o.screenshot_url || null,
       });
       // Per-credential status mirroring removed — credentials are now global

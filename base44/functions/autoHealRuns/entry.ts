@@ -50,7 +50,6 @@ async function healOneRun(base44, run) {
     await Promise.all(stuck.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
         status: 'queued',
-        live_url: null,
         error_message: '[Auto-heal] Reclaimed from stuck running state',
       })
     ));

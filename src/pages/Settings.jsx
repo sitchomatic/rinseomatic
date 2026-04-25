@@ -9,6 +9,9 @@ import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel.jsx";
 import ExternalProxiesManager from "@/components/settings/ExternalProxiesManager";
+import ProxyPoolsManager from "@/components/settings/ProxyPoolsManager";
+import RepairSuggestionsPanel from "@/components/settings/RepairSuggestionsPanel";
+import MaintenancePanel from "@/components/settings/MaintenancePanel";
 import DiagnosticsPanel from "@/components/settings/DiagnosticsPanel";
 import TerminalSettingsPanel from "@/components/settings/TerminalSettingsPanel";
 import SiteSandbox from "@/components/settings/SiteSandbox";
@@ -95,7 +98,10 @@ export default function Settings() {
         <TerminalSettingsPanel />
         <ProxySettingsPanel proxies={proxies} />
         <DiagnosticsPanel />
+        <MaintenancePanel />
         <ExternalProxiesManager proxies={proxies} />
+        <ProxyPoolsManager proxies={proxies} />
+        <RepairSuggestionsPanel />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_420px] gap-6">

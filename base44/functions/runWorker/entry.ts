@@ -1,5 +1,20 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Fire-and-forget log writer — never throws.
+async function logEvent(base44, f) {
+  try {
+    await base44.asServiceRole.entities.ActionLog.create({
+      level: f.level || 'info',
+      category: f.category || 'system',
+      message: String(f.message || '').slice(0, 2000),
+      site: f.site || undefined,
+      delta_ms: f.delta_ms || 0,
+      session_id: f.session_id || undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (_e) {}
+}
+
 // Claims up to `concurrency` queued TestResults for a run, tests them in parallel,
 // and updates the TestRun counters. Designed to be invoked repeatedly from the UI
 // (simple polling) so runs survive page refresh.
@@ -149,6 +164,7 @@ Deno.serve(async (req) => {
     );
 
     if (queued.length === 0) {
+      // no-op log path
       // L2 fix: Trust the incremental counters first. If pending_count says 0
       // AND there are no running rows, we're done — no full scan needed. Only
       // if the counters look inconsistent (pending=0 but a running row exists)
@@ -179,7 +195,16 @@ Deno.serve(async (req) => {
         status: 'running',
         started_at: run.started_at || new Date().toISOString(),
       });
+      logEvent(base44, {
+        level: 'info', category: 'system', site: run.site_key, session_id: run_id,
+        message: `Run started · ${run.label || run_id} · ${run.total_count} creds · concurrency=${run.concurrency || 2}`,
+      });
     }
+
+    logEvent(base44, {
+      level: 'debug', category: 'system', site: run.site_key, session_id: run_id,
+      message: `Claiming batch · ${queued.length} row(s)`,
+    });
 
     // A1: Claim by transitioning queued → running in one pass. The cron is now
     // the only writer (client-side leader removed in D9), so the prior double-
@@ -270,6 +295,11 @@ Deno.serve(async (req) => {
         ended_at: new Date().toISOString(),
         elapsed_ms: run.started_at ? Date.now() - new Date(run.started_at).getTime() : 0,
       };
+      logEvent(base44, {
+        level: 'success', category: 'system', site: run.site_key, session_id: run_id,
+        delta_ms: updatePayload.elapsed_ms,
+        message: `Run completed · ${run.label || run_id} · working=${updatePayload.working_count} failed=${updatePayload.failed_count} error=${updatePayload.error_count}`,
+      });
     }
 
     await base44.asServiceRole.entities.TestRun.update(run_id, updatePayload);

@@ -7,6 +7,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const API_BASE = 'https://app.scrapingbee.com/api/v1/';
 
+async function logEvent(base44, f) {
+  try {
+    await base44.asServiceRole.entities.ActionLog.create({
+      level: f.level || 'info',
+      category: f.category || 'system',
+      message: String(f.message || '').slice(0, 2000),
+      delta_ms: f.delta_ms || 0,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (_e) {}
+}
+
 function buildScrapingBeeProbeUrl(apiKey, settings, override) {
   const mode = override?.proxy_mode ?? settings.proxy_mode ?? 'premium';
   const country = (override?.country_code || settings.country_code || 'au').toLowerCase();
@@ -54,6 +66,10 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const text = await res.text();
+      logEvent(base44, {
+        level: 'error', category: 'network', delta_ms: totalMs,
+        message: `Diagnostics probe failed · ScrapingBee ${res.status}`,
+      });
       return Response.json({
         ok: false,
         provider_reachable: false,
@@ -67,6 +83,11 @@ Deno.serve(async (req) => {
     const text = await res.text();
     let info = {};
     try { info = JSON.parse(text); } catch (_) { /* keep info empty */ }
+
+    logEvent(base44, {
+      level: info.ip ? 'success' : 'warn', category: 'network', delta_ms: totalMs,
+      message: `Diagnostics probe · IP=${info.ip || '?'} country=${info.country || '?'} city=${info.city || '?'} org=${info.org || '?'}`,
+    });
 
     return Response.json({
       ok: true,

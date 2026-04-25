@@ -1,5 +1,19 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+async function logEvent(base44, f) {
+  try {
+    await base44.asServiceRole.entities.ActionLog.create({
+      level: f.level || 'info',
+      category: f.category || 'system',
+      message: String(f.message || '').slice(0, 2000),
+      site: f.site || undefined,
+      delta_ms: f.delta_ms || 0,
+      session_id: f.session_id || undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (_e) {}
+}
+
 // Atomically cancel a run server-side. Replaces the previous client-side
 // cancel that fetched all results, updated each one in a Promise.all, and
 // then recomputed counters from the result list. With 1k+ results that path
@@ -58,6 +72,11 @@ Deno.serve(async (req) => {
       working_count: run.working_count || 0,
       failed_count: run.failed_count || 0,
       error_count: (run.error_count || 0) + cancelled.length,
+    });
+
+    logEvent(base44, {
+      level: 'warn', category: 'system', site: run.site_key, session_id: run_id,
+      message: `Run cancelled · ${run.label || run_id} · ${cancelled.length} in-flight rows aborted`,
     });
 
     return Response.json({ ok: true, cancelled: cancelled.length });

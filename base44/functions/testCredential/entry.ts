@@ -24,6 +24,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const API_BASE = 'https://app.scrapingbee.com/api/v1/';
+
+// Fire-and-forget log writer — never throws.
+async function logEvent(base44, f) {
+  try {
+    await base44.asServiceRole.entities.ActionLog.create({
+      level: f.level || 'info',
+      category: f.category || 'system',
+      message: String(f.message || '').slice(0, 2000),
+      site: f.site || undefined,
+      delta_ms: f.delta_ms || 0,
+      session_id: f.session_id || undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (_e) {}
+}
 const BLOCK_MARKERS = ['/blocked', '/error', '/access-denied', '/forbidden', '/captcha', '/challenge'];
 
 // ------------ Settings / proxy resolution ------------
@@ -361,12 +376,23 @@ Deno.serve(async (req) => {
 
     const proxy = await resolveProxy(base44, runProxy, settings);
 
+    logEvent(base44, {
+      level: 'info', category: 'auth', site: site_key,
+      message: `Test start · ${username} · ${testSites.map((s) => s.key).join('+')} · proxy=${proxy.mode}/${proxy.country_code} · pwd=${passwords.length} · strat=${strategy}`,
+    });
+
     const results = await Promise.all(testSites.map(async (s) => {
       const loginUrl = custom_url || s.login_url;
       if (!loginUrl) {
         return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
       }
-      return await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy);
+      const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy);
+      logEvent(base44, {
+        level: r.status === 'working' ? 'success' : r.status === 'error' ? 'error' : 'warn',
+        category: 'auth', site: s.key, delta_ms: r.elapsed_ms || 0,
+        message: `${username} → ${r.status}${r.final_url ? ' · ' + r.final_url : ''}${r.error_message ? ' · ' + r.error_message : ''}`,
+      });
+      return r;
     }));
 
     if (results.length === 1) {

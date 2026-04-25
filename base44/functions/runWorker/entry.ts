@@ -226,23 +226,8 @@ Deno.serve(async (req) => {
         elapsed_ms: o.elapsed_ms || 0,
         tested_at: new Date().toISOString(),
       });
-
-      // L3 fix: Mirror to Credential WITHOUT the read-then-write round trip.
-      // We don't need the existing `attempts` value — only the new fields
-      // matter for UI display, and `attempts` on Credential was a derived
-      // counter that's only ever incremented here. Dropping the read halves
-      // the network calls per terminal row.
-      if (!shouldRetry && (o.status === 'working' || o.status === 'failed' || o.status === 'error')) {
-        try {
-          const credStatus = o.status === 'working' ? 'working' : o.status === 'failed' ? 'failed' : 'error';
-          await base44.asServiceRole.entities.Credential.update(r.credential_id, {
-            status: credStatus,
-            last_tested: new Date().toISOString(),
-            last_result_note: o.error_message || (o.final_url ? `→ ${o.final_url}` : null),
-            ...(o.working_password ? { working_password: o.working_password } : {}),
-          });
-        } catch (_) { /* credential may have been deleted — ignore */ }
-      }
+      // Per-credential status mirroring removed — credentials are now global
+      // (no per-site status). Per-(credential, site) outcomes live in TestResult.
     }));
 
     // A2: Incremental counter update. Compute deltas from THIS batch's outcomes

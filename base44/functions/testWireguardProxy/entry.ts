@@ -1,10 +1,6 @@
-// Tests a NordLynx / WireGuard proxy entry by parsing its config and trying
-// to route a Browserless session through the WireGuard endpoint as an HTTP
-// proxy. NOTE: Browserless does not natively speak WireGuard — this validates
-// the config syntax + endpoint reachability, then attempts a passthrough via
-// the Endpoint host:port as if it were an HTTP proxy. For full WireGuard
-// tunnelling you'd need a sidecar (e.g. wg-quick + a SOCKS bridge) — this
-// gives you a quick "is the endpoint alive and the config well-formed" check.
+// Tests a NordLynx / WireGuard proxy entry by parsing its config and probing
+// endpoint reachability. This validates the config syntax + endpoint health.
+// Full WireGuard tunnelling still requires a sidecar (e.g. wg-quick + a SOCKS bridge).
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -38,7 +34,7 @@ function parseWireguardConfig(raw) {
   return { ok: true, host, port, public_key: peer.PublicKey, address: iface.Address || null };
 }
 
-async function tcpProbe(host, port, timeoutMs = 4000) {
+async function tcpProbe(host, port, timeoutMs) {
   const started = Date.now();
   try {
     const conn = await Promise.race([
@@ -64,6 +60,10 @@ Deno.serve(async (req) => {
     const { proxy_id } = await req.json();
     if (!proxy_id) return Response.json({ error: 'Missing proxy_id' }, { status: 400 });
 
+    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
+    const settings = settingsRows[0] || {};
+    const timeoutMs = Math.max(1000, Math.min(30000, Number(settings.proxy_ping_timeout_ms) || 4000));
+
     const rows = await base44.asServiceRole.entities.Proxy.filter({ id: proxy_id });
     const proxy = rows[0];
     if (!proxy) return Response.json({ error: 'Proxy not found' }, { status: 404 });
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
     // most NordLynx endpoints also expose 51820/tcp on the gateway. If TCP
     // fails we report "config valid, endpoint not TCP-reachable" which is the
     // correct result without running a full WireGuard handshake.
-    const probe = await tcpProbe(parsed.host, parsed.port, 4000);
+    const probe = await tcpProbe(parsed.host, parsed.port, timeoutMs);
 
     let status = 'down';
     if (probe.reachable && probe.latency_ms < 500) status = 'healthy';

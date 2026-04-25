@@ -20,7 +20,7 @@ export default function DiagnosticsPanel() {
         <div className="flex-1">
           <div className="text-sm font-medium">Network diagnostics</div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Spins up a Browserless session with the current global proxy settings, hits an IP-info endpoint, and reports what the target site would actually see.
+            Fires a probe through ScrapingBee with the current global proxy settings, hits an IP-info endpoint, and reports what the target site would actually see. Costs 1–25 credits depending on proxy tier.
           </div>
         </div>
         <Button size="sm" className="gap-1.5 h-7" onClick={() => mut.mutate()} disabled={mut.isPending}>
@@ -53,8 +53,8 @@ export default function DiagnosticsPanel() {
               <Row icon={MapPin} label="Country" value={result.country ? `${result.country} (requested ${result.country_requested?.toUpperCase()})` : "—"} mismatch={result.country && result.country_requested && result.country.toLowerCase() !== result.country_requested.toLowerCase()} />
               <Row icon={MapPin} label="City" value={result.city || "—"} />
               <Row icon={Server} label="ASN / Org" value={result.org || result.asn || "—"} />
-              <Row label="Browserless region" value={result.browserless_region} />
-              <Row label="Proxy mode" value={result.proxy_mode} />
+              <Row label="Provider" value="ScrapingBee" />
+              <Row label="Proxy tier" value={result.proxy_mode} />
               {result.probe_elapsed_ms != null && <Row label="Probe time" value={`${result.probe_elapsed_ms}ms`} />}
             </div>
           ) : (

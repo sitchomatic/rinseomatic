@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
-import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel";
+import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel.jsx";
 import ExternalProxiesManager from "@/components/settings/ExternalProxiesManager";
 import DiagnosticsPanel from "@/components/settings/DiagnosticsPanel";
 import SiteSandbox from "@/components/settings/SiteSandbox";

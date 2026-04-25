@@ -1,6 +1,29 @@
+// ScrapingBee-based credential tester.
+//
+// Uses ScrapingBee's web scraping API (https://app.scrapingbee.com/api/v1)
+// with `js_scenario` instructions to fill the login form and `json_response=true`
+// to receive a structured report (status code, resolved_url, js_scenario_report,
+// HTML body) that we use to decide working / failed / error.
+//
+// Docs followed exactly:
+//   - https://www.scrapingbee.com/documentation/        (HTML API reference)
+//   - https://www.scrapingbee.com/documentation/js-scenario/  (instructions)
+//
+// Important rules from those docs honored here:
+//   • js_scenario MUST be a STRINGIFIED JSON object passed as a query param.
+//   • The url query param MUST be URL-encoded — URLSearchParams handles this.
+//   • Only documented instructions are used: fill, wait_for, click, wait.
+//   • json_response=true returns { body, headers, cookies, resolved_url,
+//       js_scenario_report: { tasks: [{ task, action, status, duration }], ... } }.
+//   • premium_proxy / stealth_proxy / country_code / own_proxy / block_ads /
+//     block_resources / wait / window_width / window_height / timeout / screenshot
+//     are all valid documented params.
+//   • country_code requires premium_proxy or stealth_proxy (we enforce this).
+//   • timeout max is 140000 ms — we clamp.
+
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const DEFAULT_SUCCESS_SELECTOR = '.ol-alert__content.ol-alert__content--status_success';
+const API_BASE = 'https://app.scrapingbee.com/api/v1/';
 const BLOCK_MARKERS = ['/blocked', '/error', '/access-denied', '/forbidden', '/captcha', '/challenge'];
 
 // ------------ Settings / proxy resolution ------------
@@ -10,14 +33,10 @@ async function loadSettings(base44) {
 }
 
 async function resolveProxy(base44, runProxy, settings) {
-  const mode = runProxy?.proxy_mode || settings.proxy_mode || 'residential';
+  const mode = runProxy?.proxy_mode || settings.proxy_mode || 'premium';
   const out = {
     mode,
     country_code: (runProxy?.country_code || settings.country_code || 'au').toLowerCase(),
-    proxy_city: runProxy?.proxy_city || settings.proxy_city,
-    sticky: runProxy?.proxy_sticky ?? settings.proxy_sticky ?? true,
-    locale_match: runProxy?.proxy_locale_match ?? settings.proxy_locale_match ?? true,
-    preset: runProxy?.proxy_preset || settings.proxy_preset || 'none',
     external: null,
   };
   if (mode === 'external') {
@@ -31,199 +50,234 @@ async function resolveProxy(base44, runProxy, settings) {
   return out;
 }
 
-// ------------ Browserless URL builder ------------
-function buildBrowserlessUrl(settings, proxy) {
-  const region = settings.browserless_region || 'production-sfo';
-  const token = Deno.env.get('BROWSERLESS_TOKEN');
-  const params = new URLSearchParams({ token });
+// ------------ ScrapingBee request builder ------------
+// Returns a fully-formed GET URL for ScrapingBee, with the js_scenario
+// stringified per the docs.
+function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy }) {
+  const params = new URLSearchParams();
+  params.set('api_key', apiKey);
+  params.set('url', targetUrl);
+  params.set('render_js', 'true'); // js_scenario implies JS rendering
+  params.set('json_response', 'true'); // we need js_scenario_report
+  params.set('js_scenario', JSON.stringify(jsScenario)); // MUST be stringified
 
-  // Launch options
-  const launch = {
-    stealth: settings.stealth ?? true,
-    headless: settings.headless ?? true,
-    blockAds: settings.block_ads ?? true,
-    blockConsentModals: settings.block_consent_modals ?? true,
-  };
-  if (settings.slow_mo_ms) launch.slowMo = settings.slow_mo_ms;
-  if (settings.viewport_width || settings.viewport_height) {
-    launch.args = [`--window-size=${settings.viewport_width || 1366},${settings.viewport_height || 768}`];
-  }
-  params.set('launch', JSON.stringify(launch));
-
-  // Timeout
-  if (settings.timeout_ms) params.set('timeout', String(settings.timeout_ms));
-
-  // Proxy routing
-  if (proxy.mode === 'residential') {
-    params.set('proxy', 'residential');
-    if (proxy.country_code) params.set('proxyCountry', proxy.country_code);
-    if (proxy.proxy_city) params.set('proxyCity', proxy.proxy_city);
-    if (proxy.sticky) params.set('proxySticky', 'true');
-    if (proxy.locale_match) params.set('proxyLocaleMatch', 'true');
-    if (proxy.preset && proxy.preset !== 'none') params.set('proxyPreset', proxy.preset);
+  // Proxy tier — the three documented options are mutually exclusive.
+  if (proxy.mode === 'premium') {
+    params.set('premium_proxy', 'true');
+    if (proxy.country_code) params.set('country_code', proxy.country_code);
+  } else if (proxy.mode === 'stealth') {
+    params.set('stealth_proxy', 'true');
+    if (proxy.country_code) params.set('country_code', proxy.country_code);
   } else if (proxy.mode === 'external' && proxy.external) {
     const { host, port, protocol, username, password } = proxy.external;
     if (host && port) {
       const scheme = protocol || 'http';
-      const auth = username ? `${encodeURIComponent(username)}${password ? `:${encodeURIComponent(password)}` : ''}@` : '';
-      params.set('externalProxyServer', `${scheme}://${auth}${host}:${port}`);
+      const auth = username
+        ? `${encodeURIComponent(username)}${password ? `:${encodeURIComponent(password)}` : ''}@`
+        : '';
+      params.set('own_proxy', `${scheme}://${auth}${host}:${port}`);
     }
+  } else if (proxy.mode === 'none') {
+    // Direct fetch, no JS rendering — much cheaper but probably won't work
+    // for SPAs. Kept so users can opt in.
+    params.set('render_js', 'false');
+    params.delete('js_scenario');
+    params.delete('json_response');
   }
-  // 'datacenter' and 'none' → no proxy params (uses datacenter IP)
+  // 'classic' = no proxy params → ScrapingBee uses its default datacenter pool.
 
-  return `https://${region}.browserless.io/function?${params.toString()}`;
+  // Browser knobs (all documented).
+  if (settings.block_ads) params.set('block_ads', 'true');
+  if (settings.block_resources === false) params.set('block_resources', 'false');
+  // Note: block_resources defaults to TRUE in ScrapingBee. We only set it
+  // explicitly when the user disables it (most login flows need CSS/images
+  // OFF for speed, so default is fine).
+
+  if (settings.wait_after_load_ms) {
+    params.set('wait', String(Math.min(35000, Math.max(0, settings.wait_after_load_ms))));
+  }
+  if (settings.viewport_width) params.set('window_width', String(settings.viewport_width));
+  if (settings.viewport_height) params.set('window_height', String(settings.viewport_height));
+  if (settings.timeout_ms) {
+    params.set('timeout', String(Math.min(140000, Math.max(1000, settings.timeout_ms))));
+  }
+  if (settings.capture_screenshots) params.set('screenshot', 'true');
+
+  return `${API_BASE}?${params.toString()}`;
 }
 
-// ------------ Puppeteer script (runs on Browserless) ------------
-// Returns { status, final_url, marker_found, error, attempts_tried, working_password }
-const LOGIN_SCRIPT = `
-export default async ({ page, context }) => {
-  const {
-    site, username, passwords, strategy, userAgent, viewportW, viewportH
-  } = context;
+// ------------ js_scenario builder ------------
+// Per docs, instructions are an ordered list executed sequentially.
+// We use only the documented vocabulary: wait_for, fill, click, wait.
+// strict:false so a stale wait_for on the success selector doesn't abort —
+// we want the final HTML/URL even on failed logins so we can classify.
+function buildLoginScenario(site, username, password) {
+  const userSel = site.username_selector || "input[type='email'], input[name='username']";
+  const passSel = site.password_selector || "input[type='password']";
+  const submitSel = site.submit_selector || "button[type='submit']";
+  const waitMs = Math.min(20000, Math.max(0, site.wait_after_submit_ms || 3500));
 
-  const attempts = [];
-  try {
-    if (userAgent) await page.setUserAgent(userAgent);
-    if (viewportW && viewportH) await page.setViewport({ width: viewportW, height: viewportH });
+  const instructions = [
+    { wait_for: userSel },
+    { fill: [userSel, username] },
+    { fill: [passSel, password] },
+    { click: submitSel },
+    { wait: waitMs },
+  ];
+  return { strict: false, instructions };
+}
 
-    const tried = [];
-    let winner = null;
-    let lastFinalUrl = null;
-    let lastMarker = false;
-    let lastError = null;
+// ------------ Result classification ------------
+// ScrapingBee's json_response gives us: resolved_url (final URL after redirects),
+// body (final HTML), and js_scenario_report.tasks[] (status per instruction).
+// We use these three to decide working / failed / error.
+function classify(site, sbJson) {
+  const resolvedUrl = sbJson.resolved_url || sbJson.initial_status_code_url || '';
+  const body = sbJson.body || '';
+  const report = sbJson.js_scenario_report || {};
+  const tasks = Array.isArray(report.tasks) ? report.tasks : [];
 
-    const runOne = async (pw) => {
-      tried.push(pw.length);
-      try {
-        await page.goto(site.url, { waitUntil: 'networkidle2', timeout: 45000 });
-      } catch (e) {
-        return { status: 'error', error: 'navigation: ' + e.message };
-      }
-
-      const userSel = site.username_selector || "input[type='email'], input[name='username']";
-      const passSel = site.password_selector || "input[type='password']";
-      const submitSel = site.submit_selector || "button[type='submit']";
-
-      try {
-        await page.waitForSelector(userSel, { timeout: 15000 });
-      } catch (e) {
-        return { status: 'error', error: 'username field not found' };
-      }
-
-      // Clear and type
-      await page.evaluate((sel) => { const el = document.querySelector(sel); if (el) el.value = ''; }, userSel);
-      await page.type(userSel, username, { delay: 25 });
-
-      await page.evaluate((sel) => { const el = document.querySelector(sel); if (el) el.value = ''; }, passSel);
-      await page.type(passSel, pw, { delay: 25 });
-
-      const nav = page.waitForNavigation({ waitUntil: 'networkidle2', timeout: (site.wait_after_submit_ms || 3500) + 6000 }).catch(() => null);
-      try { await page.click(submitSel); } catch (_) {
-        await page.evaluate((sel) => { const el = document.querySelector(sel); if (el) el.click(); }, submitSel);
-      }
-      await nav;
-      await new Promise(r => setTimeout(r, site.wait_after_submit_ms || 2500));
-
-      const successSel = site.success_selector || ${JSON.stringify(DEFAULT_SUCCESS_SELECTOR)};
-      const { marker, url } = await page.evaluate((sel) => {
-        const el = document.querySelector(sel);
-        const visible = !!el && (el.offsetParent !== null || (el.getBoundingClientRect && el.getBoundingClientRect().height > 0));
-        return { marker: visible, url: location.href };
-      }, successSel);
-
-      lastFinalUrl = url; lastMarker = marker;
-
-      const lower = (url || '').toLowerCase();
-      const blocked = ${JSON.stringify(BLOCK_MARKERS)}.some(m => lower.includes(m));
-      const loginMarker = (site.login_url_marker || '/login').toLowerCase();
-      const stayedLogin = loginMarker ? lower.includes(loginMarker) : false;
-      const successUrl = site.success_url_contains ? lower.includes(site.success_url_contains.toLowerCase()) : false;
-
-      // Strict by default: require an explicit success signal (marker visible OR success URL match).
-      // Sites can opt in to the old lenient behaviour ("left login page and wasn't blocked") via site.lenient_success.
-      if (marker || successUrl) {
-        return { status: 'working', final_url: url, marker, working_password: pw };
-      }
-      if (site.lenient_success && !stayedLogin && !blocked) {
-        return { status: 'working', final_url: url, marker, working_password: pw };
-      }
-      return { status: 'failed', final_url: url, marker };
-    };
-
-    const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
-    for (const pw of list) {
-      const r = await runOne(pw);
-      attempts.push({ len: pw.length, status: r.status, final_url: r.final_url });
-      if (r.status === 'working') { winner = r; if (strategy !== 'all_passwords') break; }
-      if (r.status === 'error') { lastError = r.error; if (strategy === 'single') break; }
-    }
-
-    if (winner) {
-      return { data: { status: 'working', final_url: winner.final_url, marker_found: true, working_password: winner.working_password, attempts }, type: 'application/json' };
-    }
-    if (lastError && tried.length === 1) {
-      return { data: { status: 'error', error: lastError, attempts }, type: 'application/json' };
-    }
-    return { data: { status: 'failed', final_url: lastFinalUrl, marker_found: lastMarker, attempts }, type: 'application/json' };
-  } catch (e) {
-    return { data: { status: 'error', error: e.message, attempts }, type: 'application/json' };
+  // 1. If a documented instruction failed BEFORE submit (wait_for / fill),
+  //    selectors are wrong → config error.
+  const preSubmitFail = tasks.find(
+    (t) => t.status && t.status !== 'success' && (t.action === 'wait_for' || t.action === 'fill')
+  );
+  if (preSubmitFail) {
+    const which = preSubmitFail.action === 'wait_for' ? 'username field not found' : 'fill failed';
+    return { status: 'error', error: `${which}: ${preSubmitFail.task || ''}`.trim() };
   }
-};
-`;
 
-async function runBrowserless(settings, proxy, site, loginUrl, username, passwords, strategy) {
-  const url = buildBrowserlessUrl(settings, proxy);
-  const context = {
-    site: {
-      url: loginUrl,
-      username_selector: site.username_selector,
-      password_selector: site.password_selector,
-      submit_selector: site.submit_selector,
-      success_selector: site.success_selector,
-      login_url_marker: site.login_url_marker,
-      success_url_contains: site.success_url_contains,
-      wait_after_submit_ms: site.wait_after_submit_ms,
-      lenient_success: !!site.lenient_success,
-    },
-    username,
-    passwords,
-    strategy,
-    userAgent: settings.user_agent,
-    viewportW: settings.viewport_width,
-    viewportH: settings.viewport_height,
-  };
+  // 2. URL-based detection (matches the existing Browserless logic).
+  const lower = (resolvedUrl || '').toLowerCase();
+  const blocked = BLOCK_MARKERS.some((m) => lower.includes(m));
+  const loginMarker = (site.login_url_marker || '/login').toLowerCase();
+  const stayedLogin = loginMarker ? lower.includes(loginMarker) : false;
+  const successUrl = site.success_url_contains
+    ? lower.includes(site.success_url_contains.toLowerCase())
+    : false;
+
+  // 3. Success-selector detection — search the returned HTML body.
+  //    ScrapingBee returns the post-scenario HTML, so a present selector means
+  //    the success element rendered. We only do a substring check on a stripped
+  //    selector (id/class) since we don't have a DOM here. Conservative: only
+  //    treat as a positive marker if the selector is unambiguously class/id-based.
+  const successSel = site.success_selector || '';
+  let markerFound = false;
+  if (successSel && body) {
+    // Pull each id (#x) and class (.x) token from the selector and check if
+    // the HTML contains that id/class attribute. Avoids false positives from
+    // matching arbitrary substrings.
+    const tokens = [];
+    successSel.split(/[\s,>+~]+/).forEach((part) => {
+      const idMatch = part.match(/#([\w-]+)/);
+      if (idMatch) tokens.push({ kind: 'id', val: idMatch[1] });
+      const classMatches = part.match(/\.([\w-]+)/g) || [];
+      classMatches.forEach((c) => tokens.push({ kind: 'class', val: c.slice(1) }));
+    });
+    if (tokens.length > 0) {
+      markerFound = tokens.every((t) => {
+        if (t.kind === 'id') return body.includes(`id="${t.val}"`) || body.includes(`id='${t.val}'`);
+        return new RegExp(`class=["'][^"']*\\b${t.val}\\b`, 'i').test(body);
+      });
+    }
+  }
+
+  if (markerFound || successUrl) {
+    return { status: 'working', final_url: resolvedUrl, marker: markerFound };
+  }
+  if (site.lenient_success && !stayedLogin && !blocked) {
+    return { status: 'working', final_url: resolvedUrl, marker: false };
+  }
+  return { status: 'failed', final_url: resolvedUrl, marker: false };
+}
+
+// ------------ Single password attempt ------------
+async function runOne(apiKey, settings, proxy, site, loginUrl, username, password) {
+  if (proxy.mode === 'premium' || proxy.mode === 'stealth') {
+    // country_code REQUIRES premium or stealth — we already only set it in
+    // those branches in the URL builder, so this is just a guard.
+  } else if ((proxy.mode === 'classic' || proxy.mode === 'none' || proxy.mode === 'external') && proxy.country_code) {
+    // country_code is silently ignored by ScrapingBee on non-premium tiers;
+    // documented behavior, no action needed.
+  }
+
+  const url = buildScrapingBeeUrl({
+    apiKey,
+    targetUrl: loginUrl,
+    jsScenario: buildLoginScenario(site, username, password),
+    settings,
+    proxy,
+  });
 
   const started = Date.now();
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: LOGIN_SCRIPT, context }),
-  });
+  const res = await fetch(url, { method: 'GET' });
   const elapsed = Date.now() - started;
 
   if (!res.ok) {
     const text = await res.text();
-    return {
-      site_key: site.key, status: 'error',
-      error_message: `Browserless ${res.status}: ${text.slice(0, 300)}`,
-      elapsed_ms: elapsed,
-    };
+    return { status: 'error', error: `ScrapingBee ${res.status}: ${text.slice(0, 300)}`, elapsed };
   }
 
-  const json = await res.json();
-  const payload = json?.data || json;
+  // With json_response=true the response body is JSON, not the page HTML.
+  let json;
+  try {
+    json = await res.json();
+  } catch (e) {
+    return { status: 'error', error: `ScrapingBee non-JSON response: ${e.message}`, elapsed };
+  }
+
+  const verdict = classify(site, json);
+  return { ...verdict, elapsed, screenshot: json.screenshot || null };
+}
+
+// ------------ Per-site test (handles password strategy) ------------
+async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy) {
+  const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
+  let lastFailed = null;
+  let lastError = null;
+  let totalElapsed = 0;
+
+  for (const pw of list) {
+    const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw);
+    totalElapsed += r.elapsed || 0;
+
+    if (r.status === 'working') {
+      return {
+        site_key: site.key,
+        status: 'working',
+        final_url: r.final_url,
+        success_marker_found: !!r.marker,
+        working_password: pw,
+        elapsed_ms: totalElapsed,
+      };
+    }
+    if (r.status === 'error') {
+      lastError = r.error;
+      if (strategy === 'single') break;
+      continue;
+    }
+    lastFailed = r;
+    if (strategy === 'multi_password') continue;
+  }
+
+  if (lastFailed) {
+    return {
+      site_key: site.key,
+      status: 'failed',
+      final_url: lastFailed.final_url,
+      success_marker_found: false,
+      elapsed_ms: totalElapsed,
+    };
+  }
   return {
     site_key: site.key,
-    status: payload.status || 'error',
-    final_url: payload.final_url,
-    success_marker_found: !!payload.marker_found,
-    working_password: payload.working_password,
-    error_message: payload.error,
-    elapsed_ms: elapsed,
+    status: 'error',
+    error_message: lastError || 'unknown error',
+    elapsed_ms: totalElapsed,
   };
 }
 
+// ------------ Aggregator-site combine ------------
 function combine(perSite) {
   const anyWorking = perSite.find((r) => r.status === 'working');
   if (anyWorking) return {
@@ -250,6 +304,7 @@ function combine(perSite) {
   };
 }
 
+// ------------ HTTP entrypoint ------------
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -267,23 +322,23 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing username/password/site_key' }, { status: 400 });
     }
 
-    const token = Deno.env.get('BROWSERLESS_TOKEN');
-    if (!token) return Response.json({ error: 'BROWSERLESS_TOKEN not set' }, { status: 500 });
+    const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+    if (!apiKey) return Response.json({ error: 'SCRAPINGBEE_API_KEY not set' }, { status: 500 });
 
     const settings = await loadSettings(base44);
     const strategy = runStrategy || settings.default_login_strategy || 'multi_password';
 
-    // Build password list
+    // Build deduped password list.
     const passwords = [password];
-    if (Array.isArray(extra_passwords)) for (const p of extra_passwords) if (p && !passwords.includes(p)) passwords.push(p);
+    if (Array.isArray(extra_passwords)) {
+      for (const p of extra_passwords) if (p && !passwords.includes(p)) passwords.push(p);
+    }
 
-    // Resolve site
     const sites = await base44.asServiceRole.entities.Site.filter({ key: site_key });
     const site = sites[0];
     if (!site) return Response.json({ error: `Unknown site: ${site_key}` }, { status: 404 });
 
-    // Target sites — resolve all secondary keys in parallel instead of
-    // sequentially (A3/E7). 3-target aggregator runs save ~200-400ms here.
+    // Resolve test targets (primary + secondaries, or override).
     const testSites = [];
     if (Array.isArray(target_site_keys) && target_site_keys.length > 0) {
       const found = await Promise.all(
@@ -306,14 +361,12 @@ Deno.serve(async (req) => {
 
     const proxy = await resolveProxy(base44, runProxy, settings);
 
-    // Run all target sites in parallel. For aggregator credentials this halves
-    // wall-clock time vs sequential execution. Single-site runs are unaffected.
     const results = await Promise.all(testSites.map(async (s) => {
       const loginUrl = custom_url || s.login_url;
       if (!loginUrl) {
         return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
       }
-      return await runBrowserless(settings, proxy, s, loginUrl, username, passwords, strategy);
+      return await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy);
     }));
 
     if (results.length === 1) {

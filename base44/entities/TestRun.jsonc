@@ -38,14 +38,6 @@
       "type": "number",
       "default": 1
     },
-    "provider": {
-      "type": "string",
-      "enum": [
-        "browserless",
-        "scrapingbee"
-      ],
-      "description": "Provider override. Falls back to AppSettings."
-    },
     "login_strategy": {
       "type": "string",
       "enum": [
@@ -58,37 +50,20 @@
     "proxy_mode": {
       "type": "string",
       "enum": [
-        "none",
-        "datacenter",
-        "residential",
-        "external"
-      ]
+        "classic",
+        "premium",
+        "stealth",
+        "external",
+        "none"
+      ],
+      "description": "ScrapingBee proxy tier override. Falls back to AppSettings."
     },
     "country_code": {
-      "type": "string"
-    },
-    "proxy_city": {
-      "type": "string"
-    },
-    "proxy_sticky": {
-      "type": "boolean"
-    },
-    "proxy_locale_match": {
-      "type": "boolean"
-    },
-    "proxy_preset": {
       "type": "string",
-      "enum": [
-        "none",
-        "px_gov01",
-        "px_ipv6"
-      ]
+      "description": "ISO-2 country code (only honored on premium / stealth tiers)."
     },
     "external_proxy_id": {
       "type": "string"
-    },
-    "stealth": {
-      "type": "boolean"
     },
     "total_count": {
       "type": "number",

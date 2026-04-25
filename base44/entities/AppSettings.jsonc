@@ -10,104 +10,65 @@
     "provider": {
       "type": "string",
       "enum": [
-        "browserless",
         "scrapingbee"
       ],
-      "default": "browserless",
-      "description": "Default automation provider."
-    },
-    "browserless_region": {
-      "type": "string",
-      "enum": [
-        "production-sfo",
-        "production-lon",
-        "production-ams"
-      ],
-      "default": "production-sfo",
-      "description": "Browserless cloud region (SFO, London, Amsterdam)."
+      "default": "scrapingbee",
+      "description": "Automation provider. ScrapingBee is the only supported provider."
     },
     "proxy_mode": {
       "type": "string",
       "enum": [
-        "none",
-        "datacenter",
-        "residential",
-        "external"
+        "classic",
+        "premium",
+        "stealth",
+        "external",
+        "none"
       ],
-      "default": "residential",
-      "description": "Default proxy routing mode."
+      "default": "premium",
+      "description": "ScrapingBee proxy tier. 'classic' = default datacenter pool (5 credits). 'premium' = residential/premium pool, premium_proxy=true (25 credits). 'stealth' = stealth_proxy=true (75 credits, hardest sites). 'external' = own_proxy. 'none' = render_js=false direct."
     },
     "country_code": {
       "type": "string",
       "default": "au",
-      "description": "ISO 3166-1 alpha-2 country code (e.g. 'au', 'us', 'gb')."
-    },
-    "proxy_city": {
-      "type": "string",
-      "description": "Optional residential proxy city (e.g. 'sydney'). Requires Scale plan."
-    },
-    "proxy_sticky": {
-      "type": "boolean",
-      "default": true,
-      "description": "Maintain the same IP across a session."
-    },
-    "proxy_locale_match": {
-      "type": "boolean",
-      "default": true,
-      "description": "Auto-align browser locale with proxy country."
-    },
-    "proxy_preset": {
-      "type": "string",
-      "enum": [
-        "none",
-        "px_gov01",
-        "px_ipv6"
-      ],
-      "default": "none",
-      "description": "Browserless website-specific proxy presets."
+      "description": "ISO 3166-1 alpha-2 country code passed as country_code (e.g. 'au', 'us', 'gb'). Requires premium or stealth proxy on ScrapingBee."
     },
     "external_proxy_id": {
       "type": "string",
-      "description": "ID of Proxy entity to use when proxy_mode='external'."
-    },
-    "stealth": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable Browserless stealth mode (anti-bot signals)."
-    },
-    "headless": {
-      "type": "boolean",
-      "default": true
+      "description": "ID of Proxy entity to use when proxy_mode='external'. Sent to ScrapingBee as own_proxy=<scheme>://user:pass@host:port."
     },
     "block_ads": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "ScrapingBee block_ads parameter."
     },
-    "block_consent_modals": {
+    "block_resources": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "ScrapingBee block_resources parameter \u2014 blocks images/CSS for faster loads. Default ON in ScrapingBee."
     },
     "timeout_ms": {
       "type": "number",
       "default": 60000,
-      "description": "Max session duration per test, in milliseconds."
+      "description": "Max ScrapingBee request duration (ms). ScrapingBee 'timeout' param. Capped at 140000 by ScrapingBee."
     },
-    "slow_mo_ms": {
+    "wait_after_load_ms": {
       "type": "number",
       "default": 0,
-      "description": "Optional delay between browser actions (ms) to look more human."
+      "description": "ScrapingBee 'wait' parameter \u2014 extra time after page load before instructions start."
     },
     "user_agent": {
       "type": "string",
-      "description": "Optional custom User-Agent string."
+      "description": "Optional. Forwarded via forward_headers when set."
     },
     "viewport_width": {
       "type": "number",
-      "default": 1366
+      "default": 1920,
+      "description": "ScrapingBee window_width."
     },
     "viewport_height": {
       "type": "number",
-      "default": 768
+      "default": 1080,
+      "description": "ScrapingBee window_height."
     },
     "default_login_strategy": {
       "type": "string",
@@ -122,7 +83,7 @@
     "capture_screenshots": {
       "type": "boolean",
       "default": false,
-      "description": "Capture a screenshot after each login attempt."
+      "description": "Capture a screenshot after each login attempt (ScrapingBee screenshot=true, costs +1 credit)."
     }
   },
   "rls": {

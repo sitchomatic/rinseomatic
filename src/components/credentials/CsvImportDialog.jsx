@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { parseCsv } from "@/lib/csv";
+import { parseCSV } from "@/lib/csv";
 
 // Lightweight CSV import for the global vault. Expects rows of:
 //   username, password [, extra1, extra2, ...]
@@ -18,7 +18,7 @@ export default function CsvImportDialog({ open, onOpenChange }) {
   React.useEffect(() => { if (open) setText(""); }, [open]);
 
   const preview = React.useMemo(() => {
-    const rows = parseCsv(text);
+    const rows = parseCSV(text);
     if (rows.length === 0) return { records: [], skippedHeader: false };
     const first = rows[0].map((c) => (c || "").toLowerCase());
     const hasHeader = first.includes("username") || first.includes("email") || first.includes("password");

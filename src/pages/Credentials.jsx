@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import NewRunDialog from "@/components/credentials/NewRunDialog";
 import CsvImportDialog from "@/components/credentials/CsvImportDialog";
 import AddCredentialDialog from "@/components/credentials/AddCredentialDialog";
+import PasswordCell from "@/components/credentials/PasswordCell";
 
 export default function Credentials() {
   const qc = useQueryClient();
@@ -162,7 +163,7 @@ export default function Credentials() {
               >
                 <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
                 <div className="truncate">{c.username}</div>
-                <div className="truncate text-muted-foreground">{"•".repeat(Math.min(8, (c.password || "").length)) || "—"}</div>
+                <div className="min-w-0"><PasswordCell password={c.password} copyKey={`pw-${c.id}`} /></div>
                 <div className="text-muted-foreground">{(c.extra_passwords?.length || 0) > 0 ? `+${c.extra_passwords.length}` : "—"}</div>
                 <div className="truncate text-muted-foreground">{c.notes || "—"}</div>
               </label>

@@ -2,6 +2,7 @@ import React from "react";
 import StatusPill from "@/components/shared/StatusPill";
 import { formatMs } from "@/lib/sites";
 import ScreenshotPreview from "@/components/runs/ScreenshotPreview";
+import ResultDetailDialog from "@/components/runs/ResultDetailDialog";
 
 // Pull the "[Class] " tag out of error messages saved by the worker (D1).
 // Returns { label, message } where label may be null.
@@ -27,6 +28,7 @@ const ERROR_TONE = {
 };
 
 export default function ResultsTable({ results }) {
+  const [selected, setSelected] = React.useState(null);
   // L12 fix: pre-parse error tags ONCE per result list, not on every render.
   // Worst case (5k results, 10 streaming updates/sec) goes from 50k regex
   // executions per second to 5k once.
@@ -59,7 +61,8 @@ export default function ResultsTable({ results }) {
         {decorated.map(({ row: r, label, message, tone }, i) => (
           <div
             key={r.id}
-            className="grid grid-cols-[minmax(0,2fr)_110px_80px_minmax(0,3fr)_70px_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono animate-row-in"
+            onClick={() => setSelected(r)}
+            className="grid grid-cols-[minmax(0,2fr)_110px_80px_minmax(0,3fr)_70px_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono animate-row-in cursor-pointer hover:bg-secondary/30"
             style={{ animationDelay: `${Math.min(i * 8, 200)}ms` }}
           >
             <div className="truncate">{r.username}</div>
@@ -75,11 +78,12 @@ export default function ResultsTable({ results }) {
                 {message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
               </span>
             </div>
-            <div><ScreenshotPreview url={r.screenshot_url} username={r.username} /></div>
+            <div onClick={(e) => e.stopPropagation()}><ScreenshotPreview url={r.screenshot_url} username={r.username} /></div>
             <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
           </div>
         ))}
       </div>
+      <ResultDetailDialog result={selected} onOpenChange={setSelected} />
     </div>
   );
 }

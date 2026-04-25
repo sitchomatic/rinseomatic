@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2, Download, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2, Download, Trash2, Clock, RotateCcw } from "lucide-react";
 import { toCsv, downloadFile } from "@/lib/download";
 import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -12,6 +12,7 @@ import StatusPill from "@/components/shared/StatusPill";
 import SiteChip from "@/components/shared/SiteChip";
 import ResultsTable from "@/components/runs/ResultsTable";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import RerunFailedDialog from "@/components/runs/RerunFailedDialog";
 import { formatMs } from "@/lib/sites";
 import { runEta, formatEta } from "@/lib/eta";
 import { toast } from "sonner";
@@ -23,6 +24,7 @@ export default function RunDetail() {
   const qc = useQueryClient();
   const [tab, setTab] = React.useState("all");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [showRerun, setShowRerun] = React.useState(false);
 
   const { data: run, isLoading: runLoading, isError: runError } = useQuery({
     queryKey: ["test-run", id],
@@ -162,6 +164,11 @@ export default function RunDetail() {
             <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv} disabled={results.length === 0}>
               <Download className="h-3.5 w-3.5" /> Export CSV
             </Button>
+            {isTerminal && (buckets.error.length > 0 || buckets.failed.length > 0) && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowRerun(true)}>
+                <RotateCcw className="h-3.5 w-3.5" /> Re-run failures
+              </Button>
+            )}
             {(run.status === "running" || run.status === "queued") && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => cancelMut.mutate()}>
                 <Square className="h-3.5 w-3.5" /> Cancel
@@ -208,6 +215,13 @@ export default function RunDetail() {
           <ResultsTable results={filtered} />
         </TabsContent>
       </Tabs>
+
+      <RerunFailedDialog
+        open={showRerun}
+        onOpenChange={setShowRerun}
+        run={run}
+        results={results}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

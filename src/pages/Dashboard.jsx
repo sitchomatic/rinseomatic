@@ -5,6 +5,8 @@ import { base44 } from "@/api/base44Client";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/dashboard/StatCard";
 import RecentRuns from "@/components/dashboard/RecentRuns";
+import TrendChart from "@/components/dashboard/TrendChart";
+import SiteBreakdown from "@/components/dashboard/SiteBreakdown";
 import { Button } from "@/components/ui/button";
 import { Key, Play, CheckCircle2, AlertTriangle, Activity } from "lucide-react";
 
@@ -65,6 +67,11 @@ export default function Dashboard() {
         <StatCard label="Working" value={totals.working} icon={CheckCircle2} accent="text-emerald-300" sub="across all runs" />
         <StatCard label="Failed" value={totals.failed} icon={AlertTriangle} accent="text-rose-300" sub="bad password / blocked" />
         <StatCard label="Active runs" value={totals.active} icon={Activity} accent="text-sky-300" sub={totals.errored ? `${totals.errored} errors total` : "queued or running"} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-8">
+        <div className="lg:col-span-2"><TrendChart runs={runs} /></div>
+        <SiteBreakdown runs={runs} sites={sites} />
       </div>
 
       <RecentRuns runs={runs} sites={sites} />

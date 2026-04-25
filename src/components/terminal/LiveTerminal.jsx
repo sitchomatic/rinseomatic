@@ -8,6 +8,8 @@ const FILTERS = [
   { key: "all", label: "All" },
   { key: "req", label: "→ Req" },
   { key: "res", label: "← Res" },
+  { key: "ws", label: "WS" },
+  { key: "sse", label: "SSE" },
   { key: "log", label: "Logs" },
 ];
 
@@ -75,13 +77,14 @@ export default function LiveTerminal() {
   }, [entries, filter, search]);
 
   const counts = React.useMemo(() => {
-    let req = 0, res = 0, log = 0, err = 0;
+    let req = 0, res = 0, log = 0, ws = 0, err = 0;
     for (const e of entries) {
       if (e.kind === "req") req++;
       else if (e.kind === "res") { res++; if (!e.ok) err++; }
       else if (e.kind === "log") { log++; if (e.level === "error") err++; }
+      else if (e.kind === "ws" || e.kind === "sse") { ws++; if (e.phase === "error") err++; }
     }
-    return { req, res, log, err };
+    return { req, res, log, ws, err };
   }, [entries]);
 
   // Drag-resize handle.
@@ -143,7 +146,7 @@ export default function LiveTerminal() {
         <TerminalIcon className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="text-xs font-mono font-semibold">live terminal</span>
         <span className="text-[10px] font-mono text-muted-foreground">
-          → {counts.req} · ← {counts.res} · ▸ {counts.log}
+          → {counts.req} · ← {counts.res} · ◇ {counts.ws} · ▸ {counts.log}
           {counts.err > 0 && <span className="text-rose-300"> · ⚠ {counts.err}</span>}
         </span>
 

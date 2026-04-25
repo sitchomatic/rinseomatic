@@ -5,11 +5,13 @@ import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import LiveTerminal from "@/components/terminal/LiveTerminal";
 import { installNetworkInterceptor } from "@/lib/installNetworkInterceptor";
+import { installSocketInterceptor } from "@/lib/installSocketInterceptor";
 import { startLogStreamer } from "@/lib/installLogStreamer";
 
-// Boot the terminal capture as soon as the Layout module loads. Both helpers
+// Boot the terminal capture as soon as the Layout module loads. All helpers
 // are idempotent so this is safe across HMR.
 installNetworkInterceptor();
+installSocketInterceptor();
 startLogStreamer();
 
 const NAV = [

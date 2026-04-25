@@ -1,6 +1,6 @@
 import React from "react";
 import { format } from "date-fns";
-import { ArrowRight, ArrowLeft, Activity, ChevronRight } from "lucide-react";
+import { ArrowRight, ArrowLeft, Activity, ChevronRight, Radio, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Trim verbose URL prefix so rows fit. Keeps the path + last segment readable.
@@ -94,6 +94,43 @@ export default function TerminalRow({ entry }) {
         {open && expandable && (
           <pre className="ml-[112px] mr-3 mb-1 text-[10px] bg-secondary/40 border border-border/60 rounded p-2 overflow-x-auto thin-scroll text-muted-foreground whitespace-pre-wrap break-all">
 {formatBody(entry.body) || entry.error}
+          </pre>
+        )}
+      </div>
+    );
+  }
+
+  // --- WebSocket / EventSource ---
+  if (entry.kind === "ws" || entry.kind === "sse") {
+    const isMsg = entry.phase === "msg";
+    const isErr = entry.phase === "error";
+    const tone = isErr ? "text-rose-300" : isMsg ? "text-violet-300" : "text-fuchsia-300";
+    const borderTone = isErr ? "border-rose-500/40" : "border-violet-500/40";
+    const Icon = entry.kind === "sse" ? Zap : Radio;
+    const expandable = entry.body != null;
+    const label = `${entry.kind.toUpperCase()} ${entry.phase}`;
+    return (
+      <div className={cn("border-l-2", borderTone)}>
+        <button
+          type="button"
+          onClick={() => expandable && setOpen((v) => !v)}
+          className={cn(
+            "w-full text-left grid grid-cols-[80px_16px_16px_44px_1fr_60px] gap-2 px-3 py-1 items-center hover:bg-secondary/30",
+            !expandable && "cursor-default"
+          )}
+        >
+          <span className="text-muted-foreground tabular-nums text-[10px]">{ts}</span>
+          {expandable ? (
+            <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform", open && "rotate-90")} />
+          ) : <span />}
+          <Icon className={cn("h-3 w-3", tone)} />
+          <span className={cn("font-semibold text-[10px] uppercase truncate", tone)}>{label}</span>
+          <span className="truncate text-foreground/90" title={entry.url}>{shortUrl(entry.url)}</span>
+          <span />
+        </button>
+        {open && expandable && (
+          <pre className="ml-[112px] mr-3 mb-1 text-[10px] bg-secondary/40 border border-border/60 rounded p-2 overflow-x-auto thin-scroll text-muted-foreground whitespace-pre-wrap break-all">
+{formatBody(entry.body)}
           </pre>
         )}
       </div>

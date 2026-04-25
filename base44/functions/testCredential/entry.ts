@@ -206,8 +206,13 @@ function classify(site, sbJson) {
   return { status: 'failed', final_url: resolvedUrl, marker: false };
 }
 
+// Strip the api_key from a ScrapingBee URL so it's safe to log.
+function redactUrl(url) {
+  try { return url.replace(/(api_key=)[^&]+/, '$1***'); } catch { return '[redacted]'; }
+}
+
 // ------------ Single password attempt ------------
-async function runOne(apiKey, settings, proxy, site, loginUrl, username, password) {
+async function runOne(apiKey, settings, proxy, site, loginUrl, username, password, base44, site_key) {
   if (proxy.mode === 'premium' || proxy.mode === 'stealth') {
     // country_code REQUIRES premium or stealth — we already only set it in
     // those branches in the URL builder, so this is just a guard.
@@ -224,12 +229,22 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
     proxy,
   });
 
+  // Stream the literal outbound URL into the live terminal (api_key redacted).
+  logEvent(base44, {
+    level: 'debug', category: 'network', site: site_key,
+    message: `→ ScrapingBee · ${redactUrl(url).slice(0, 1500)}`,
+  });
+
   const started = Date.now();
   const res = await fetch(url, { method: 'GET' });
   const elapsed = Date.now() - started;
 
   if (!res.ok) {
     const text = await res.text();
+    logEvent(base44, {
+      level: 'error', category: 'network', site: site_key, delta_ms: elapsed,
+      message: `← ScrapingBee ${res.status} · ${text.slice(0, 300)}`,
+    });
     return { status: 'error', error: `ScrapingBee ${res.status}: ${text.slice(0, 300)}`, elapsed };
   }
 
@@ -242,6 +257,15 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   }
 
   const verdict = classify(site, json);
+  // Compact verdict log — final URL, task statuses, screenshot flag. The full
+  // HTML body is intentionally omitted (it's huge and contains the page DOM).
+  const tasks = (json.js_scenario_report?.tasks || []).map((t) => `${t.action}:${t.status}`).join(' ');
+  logEvent(base44, {
+    level: verdict.status === 'working' ? 'success' : verdict.status === 'error' ? 'error' : 'warn',
+    category: 'network', site: site_key, delta_ms: elapsed,
+    message: `← ScrapingBee ${res.status} · ${verdict.status} · ${json.resolved_url || '(no url)'} · [${tasks}]${json.screenshot ? ' · shot' : ''}`,
+  });
+
   return { ...verdict, elapsed, screenshot_b64: json.screenshot || null };
 }
 
@@ -266,7 +290,7 @@ async function uploadScreenshot(base44, b64, site_key, username) {
 }
 
 // ------------ Per-site test (handles password strategy) ------------
-async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy) {
+async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy, base44) {
   const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
   let lastFailed = null;
   let lastError = null;
@@ -277,7 +301,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
   let lastScreenshot = null;
 
   for (const pw of list) {
-    const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw);
+    const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw, base44, site.key);
     totalElapsed += r.elapsed || 0;
     if (r.screenshot_b64) lastScreenshot = r.screenshot_b64;
 
@@ -414,7 +438,7 @@ Deno.serve(async (req) => {
       if (!loginUrl) {
         return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
       }
-      const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy);
+      const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy, base44);
       logEvent(base44, {
         level: r.status === 'working' ? 'success' : r.status === 'error' ? 'error' : 'warn',
         category: 'auth', site: s.key, delta_ms: r.elapsed_ms || 0,

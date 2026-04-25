@@ -23,6 +23,7 @@ const BLANK = {
   success_url_contains: "",
   wait_after_submit_ms: 3500,
   enabled: true,
+  lenient_success: false,
 };
 
 export default function Settings() {
@@ -203,6 +204,19 @@ export default function Settings() {
             help="How long to wait after clicking submit before checking for success. Increase for slow sites; decrease to speed up testing."
             value={draft.wait_after_submit_ms} onChange={(v) => setDraft({ ...draft, wait_after_submit_ms: Number(v) || 0 })}
           />
+
+          <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/40 px-3 py-2"
+            title="Off (default): a credential is only 'working' when the success selector or success URL is matched. On: also count any non-login URL (that wasn't blocked) as working — convenient but causes false positives.">
+            <div>
+              <div className="text-xs">Lenient success detection</div>
+              <div className="text-[10px] text-muted-foreground leading-snug mt-0.5">
+                {draft.lenient_success
+                  ? "Counts 'left login page' as success even without a success marker."
+                  : "Strict — requires success selector or success URL to count as working."}
+              </div>
+            </div>
+            <Switch checked={!!draft.lenient_success} onCheckedChange={(v) => setDraft({ ...draft, lenient_success: v })} />
+          </label>
 
           <div className="flex items-center justify-between pt-2 border-t border-border/60">
             <label className="flex items-center gap-2 cursor-pointer" title="When off, this site is hidden from run pickers and new credentials can't target it.">

@@ -57,6 +57,11 @@
       "type": "boolean",
       "default": false,
       "description": "If true, skip testing this site's own login_url and only test the secondary_site_keys. Used for aggregator sites like 'double'."
+    },
+    "lenient_success": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, treat 'left the login page (and not blocked)' as a working login even without a success marker. Off by default to avoid false positives."
     }
   },
   "required": [

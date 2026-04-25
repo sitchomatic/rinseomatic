@@ -10,8 +10,9 @@ import EmptyState from "@/components/shared/EmptyState";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import CredentialsTable from "@/components/credentials/CredentialsTable";
 import CredentialDialog from "@/components/credentials/CredentialDialog";
-import CsvImportDialog from "@/components/credentials/CsvImportDialog";
+import CsvImportDialog from "@/components/credentials/CsvImportDialog.jsx";
 import BulkActionsBar from "@/components/credentials/BulkActionsBar";
+import AggregatorQuickTest from "@/components/credentials/AggregatorQuickTest";
 import NewRunDialog from "@/components/runs/NewRunDialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -128,14 +129,14 @@ export default function Credentials() {
     return acc;
   }, {});
 
-  // Aggregator quick-test: pick a site that aggregates joe+ignition
-  const aggregatorSite = sites.find((s) => Array.isArray(s.secondary_site_keys) && s.secondary_site_keys.length > 0);
-  const aggregatorTargets = aggregatorSite ? aggregatorSite.secondary_site_keys : [];
-  const aggregatorCount = aggregatorSite ? (siteCounts[aggregatorSite.key] || 0) : 0;
-
-  const openQuickRun = (targetKey) => {
+  // Aggregator quick-test: any site with secondary_site_keys can route creds to a chosen underlying site
+  const openQuickRun = (aggregator, targetKey) => {
     const target = sites.find((s) => s.key === targetKey);
-    setLockedTarget({ keys: [targetKey], label: target?.label || targetKey });
+    setLockedTarget({
+      aggregatorKey: aggregator.key,
+      keys: [targetKey],
+      label: target?.label || targetKey,
+    });
     setRunOpen(true);
   };
   const openNormalRun = () => { setLockedTarget(null); setRunOpen(true); };
@@ -166,22 +167,11 @@ export default function Credentials() {
         }
       />
 
-      {aggregatorSite && aggregatorCount > 0 && aggregatorTargets.length > 0 && (
-        <div className="mb-5 rounded-lg border border-border bg-card/60 px-4 py-3 flex flex-wrap items-center gap-3">
-          <div className="text-xs text-muted-foreground">
-            Quick-test <span className="font-mono text-foreground">{aggregatorSite.label}</span> credentials ({aggregatorCount}) against:
-          </div>
-          {aggregatorTargets.map((tk) => {
-            const t = sites.find((s) => s.key === tk);
-            return (
-              <Button key={tk} size="sm" variant="outline" className="gap-2 h-7"
-                onClick={() => openQuickRun(tk)}>
-                <Play className="h-3 w-3" /> {t?.label || tk} only
-              </Button>
-            );
-          })}
-        </div>
-      )}
+      <AggregatorQuickTest
+        sites={sites}
+        siteCounts={siteCounts}
+        onQuickRun={openQuickRun}
+      />
 
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-5">
         <Tabs value={siteFilter} onValueChange={setSiteFilter}>
@@ -274,11 +264,11 @@ export default function Credentials() {
         onOpenChange={(v) => { setRunOpen(v); if (!v) setLockedTarget(null); }}
         sites={sites}
         defaultSiteKey={
-          lockedTarget ? aggregatorSite?.key :
+          lockedTarget ? lockedTarget.aggregatorKey :
           runSiteKey || (siteFilter !== "all" ? siteFilter : undefined)
         }
         lockedSiteKey={
-          lockedTarget ? aggregatorSite?.key :
+          lockedTarget ? lockedTarget.aggregatorKey :
           (canRunSelected ? runSiteKey : undefined)
         }
         lockedTargetKeys={lockedTarget?.keys}

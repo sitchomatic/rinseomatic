@@ -140,7 +140,12 @@ export default async ({ page, context }) => {
       const stayedLogin = loginMarker ? lower.includes(loginMarker) : false;
       const successUrl = site.success_url_contains ? lower.includes(site.success_url_contains.toLowerCase()) : false;
 
-      if (marker || successUrl || (!stayedLogin && !blocked)) {
+      // Strict by default: require an explicit success signal (marker visible OR success URL match).
+      // Sites can opt in to the old lenient behaviour ("left login page and wasn't blocked") via site.lenient_success.
+      if (marker || successUrl) {
+        return { status: 'working', final_url: url, marker, working_password: pw };
+      }
+      if (site.lenient_success && !stayedLogin && !blocked) {
         return { status: 'working', final_url: url, marker, working_password: pw };
       }
       return { status: 'failed', final_url: url, marker };
@@ -179,6 +184,7 @@ async function runBrowserless(settings, proxy, site, loginUrl, username, passwor
       login_url_marker: site.login_url_marker,
       success_url_contains: site.success_url_contains,
       wait_after_submit_ms: site.wait_after_submit_ms,
+      lenient_success: !!site.lenient_success,
     },
     username,
     passwords,

@@ -14,6 +14,7 @@ import ResultsTable from "@/components/runs/ResultsTable";
 import { formatMs } from "@/lib/sites";
 import { toast } from "sonner";
 import { useRunWorker } from "@/lib/useRunWorker";
+import { useLiveResults } from "@/lib/useLiveResults";
 
 export default function RunDetail() {
   const { id } = useParams();
@@ -28,12 +29,7 @@ export default function RunDetail() {
     enabled: !!id,
   });
 
-  const { data: results = [] } = useQuery({
-    queryKey: ["test-results", id],
-    queryFn: () => base44.entities.TestResult.filter({ run_id: id }, "-created_date", 5000),
-    refetchInterval: 2000,
-    enabled: !!id,
-  });
+  const { data: results = [] } = useLiveResults(id);
 
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],

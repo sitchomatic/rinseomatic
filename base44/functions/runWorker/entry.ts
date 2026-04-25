@@ -51,10 +51,6 @@ async function testOne(base44, site, result, run) {
       proxy: {
         proxy_mode: run.proxy_mode,
         country_code: run.country_code,
-        proxy_city: run.proxy_city,
-        proxy_sticky: run.proxy_sticky,
-        proxy_locale_match: run.proxy_locale_match,
-        proxy_preset: run.proxy_preset,
         external_proxy_id: run.external_proxy_id,
       },
     });

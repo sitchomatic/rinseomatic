@@ -270,8 +270,14 @@ function Section({ title, desc, children }) {
     </div>
   );
 }
+// L30 fix: explicit class strings instead of dynamic interpolation. Tailwind's
+// JIT purges classes it can't see at build time — `md:grid-cols-${cols}` was
+// invisible to the scanner and only worked by coincidence (the same class
+// happened to be referenced elsewhere in the codebase). Hard-coding the two
+// supported values guarantees they survive purge.
 function Grid({ cols = 2, children }) {
-  return <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-3`}>{children}</div>;
+  const colClass = cols === 3 ? "md:grid-cols-3" : "md:grid-cols-2";
+  return <div className={`grid grid-cols-1 ${colClass} gap-3`}>{children}</div>;
 }
 function Field({ label, help, children }) {
   return (

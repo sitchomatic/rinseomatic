@@ -273,13 +273,14 @@ Deno.serve(async (req) => {
     };
 
     if (isDone) {
-      // Reconcile from source of truth on completion — guards against drift.
-      const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 5000);
+      // L29 fix: Trust the incremental counters. Previous code did a full
+      // 5000-row scan on every completion as a "consistency check" — but
+      // every counter mutation goes through this same code path (or
+      // cancelRun's incremental path post-L28), so drift cannot occur.
+      // The reconciliation read was defensive code from when client-side
+      // workers also wrote counters; that path no longer exists.
       updatePayload = {
-        pending_count: all.filter((r) => r.status === 'queued' || r.status === 'running').length,
-        working_count: all.filter((r) => r.status === 'working').length,
-        failed_count: all.filter((r) => r.status === 'failed').length,
-        error_count: all.filter((r) => r.status === 'error').length,
+        ...updatePayload,
         status: 'completed',
         ended_at: new Date().toISOString(),
         elapsed_ms: run.started_at ? Date.now() - new Date(run.started_at).getTime() : 0,

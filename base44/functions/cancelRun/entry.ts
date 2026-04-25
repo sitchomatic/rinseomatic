@@ -24,33 +24,25 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, already_terminal: true, status: run.status });
     }
 
-    // Mark cancelled FIRST so the cron's next tick exits early when it loads
-    // this run.
-    await base44.asServiceRole.entities.TestRun.update(run_id, {
-      status: 'cancelled',
-      ended_at: new Date().toISOString(),
-    });
+    // L28 fix: race-free cancel via incremental counter math.
+    // Previous version: 1) write status=cancelled, 2) read all 5k rows,
+    // 3) tally everything, 4) overwrite the TestRun with counters. Two
+    // sequential TestRun writes plus a full-table read.
+    //
+    // New approach: only fetch the in-flight rows (the only ones that need
+    // changing), trust the existing counters for working/failed/error, and
+    // adjust them by the cancel deltas. Single TestRun write, single
+    // targeted read. Status flip moves to that one write so cron-readers
+    // never see an inconsistent {status: cancelled, pending: 5000} state.
+    const inFlight = await base44.asServiceRole.entities.TestResult.filter(
+      { run_id, status: 'queued' }, '-created_date', 10000
+    );
+    const inFlightRunning = await base44.asServiceRole.entities.TestResult.filter(
+      { run_id, status: 'running' }, '-created_date', 10000
+    );
+    const cancelled = [...inFlight, ...inFlightRunning];
 
-    // Single-pass over all results — don't re-fetch.
-    const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 10000);
-
-    // L5 fix: Single-pass classification with applied transitions. Previously
-    // we counted `working/failed` from the pre-update snapshot AND added
-    // inFlight.length to errored — which double-counts if a row flipped to
-    // working/failed between the read and the write. Now we apply the
-    // queued/running → error transition in-memory, then tally once.
-    const inFlight = [];
-    let working = 0, failed = 0, errored = 0;
-    for (const r of all) {
-      if (r.status === 'queued' || r.status === 'running') {
-        inFlight.push(r);
-        errored++; // will become 'error'
-      } else if (r.status === 'working') working++;
-      else if (r.status === 'failed') failed++;
-      else if (r.status === 'error') errored++;
-    }
-
-    await Promise.all(inFlight.map((r) =>
+    await Promise.all(cancelled.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
         status: 'error',
         error_message: 'Cancelled',
@@ -59,13 +51,16 @@ Deno.serve(async (req) => {
     ));
 
     await base44.asServiceRole.entities.TestRun.update(run_id, {
+      status: 'cancelled',
+      ended_at: new Date().toISOString(),
+      elapsed_ms: run.started_at ? Date.now() - new Date(run.started_at).getTime() : (run.elapsed_ms || 0),
       pending_count: 0,
-      working_count: working,
-      failed_count: failed,
-      error_count: errored,
+      working_count: run.working_count || 0,
+      failed_count: run.failed_count || 0,
+      error_count: (run.error_count || 0) + cancelled.length,
     });
 
-    return Response.json({ ok: true, cancelled: inFlight.length });
+    return Response.json({ ok: true, cancelled: cancelled.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

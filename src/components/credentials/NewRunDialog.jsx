@@ -20,6 +20,7 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
   const [maxRetries, setMaxRetries] = React.useState(1);
   const [strategy, setStrategy] = React.useState("multi_password");
   const [customUrl, setCustomUrl] = React.useState("");
+  const [targetSiteKeys, setTargetSiteKeys] = React.useState("");
   const [proxyMode, setProxyMode] = React.useState("default");
   const [countryCode, setCountryCode] = React.useState("");
   const [externalProxyId, setExternalProxyId] = React.useState("");
@@ -39,6 +40,7 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
     if (open) {
       setLabel(`Run · ${format(new Date(), "MMM d HH:mm")}`);
       setCustomUrl("");
+      setTargetSiteKeys("");
       setProxyMode("default");
       setCountryCode("");
       setExternalProxyId("");
@@ -71,6 +73,7 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
         label,
         site_key: siteKey,
         custom_url: customUrl.trim() || undefined,
+        target_site_keys: targetSiteKeys.trim() ? targetSiteKeys.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
         status: "queued",
         concurrency: Math.max(1, Math.min(5, Number(concurrency) || 2)),
         max_retries: Math.max(0, Math.min(5, Number(maxRetries) || 1)),
@@ -140,6 +143,9 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
           </Field>
           <Field label="Custom login URL (optional)" help="Overrides the site's login URL for this run only.">
             <Input value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} placeholder="leave blank to use the site's URL" className="font-mono text-xs" />
+          </Field>
+          <Field label="Target site keys override (optional)" help="Comma-separated site keys. Useful for forcing aggregator sites to test only specific targets.">
+            <Input value={targetSiteKeys} onChange={(e) => setTargetSiteKeys(e.target.value)} placeholder="joe, ignition" className="font-mono text-xs" />
           </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Concurrency" help="1–5. Higher = more parallel browser sessions.">

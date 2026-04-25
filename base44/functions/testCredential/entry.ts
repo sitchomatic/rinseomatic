@@ -117,6 +117,7 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy })
     params.set('timeout', String(Math.min(140000, Math.max(1000, settings.timeout_ms))));
   }
   if (settings.capture_screenshots) params.set('screenshot', 'true');
+  if (settings.user_agent) params.set('forward_headers', 'true');
 
   return `${API_BASE}?${params.toString()}`;
 }
@@ -236,7 +237,8 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   });
 
   const started = Date.now();
-  const res = await fetch(url, { method: 'GET' });
+  const headers = settings.user_agent ? { 'User-Agent': settings.user_agent } : undefined;
+  const res = await fetch(url, { method: 'GET', headers });
   const elapsed = Date.now() - started;
 
   if (!res.ok) {

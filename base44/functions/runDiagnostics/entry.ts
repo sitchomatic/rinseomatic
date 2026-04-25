@@ -37,6 +37,7 @@ function buildScrapingBeeProbeUrl(apiKey, settings, override) {
     params.set('stealth_proxy', 'true');
     if (country) params.set('country_code', country);
   }
+  if (settings.user_agent) params.set('forward_headers', 'true');
   // 'classic' / 'none' / 'external' → no proxy params for the diagnostics probe.
 
   return `${API_BASE}?${params.toString()}`;
@@ -61,7 +62,8 @@ Deno.serve(async (req) => {
 
     const url = buildScrapingBeeProbeUrl(apiKey, settings, override);
     const started = Date.now();
-    const res = await fetch(url, { method: 'GET' });
+    const headers = settings.user_agent ? { 'User-Agent': settings.user_agent } : undefined;
+    const res = await fetch(url, { method: 'GET', headers });
     const totalMs = Date.now() - started;
 
     if (!res.ok) {

@@ -2,13 +2,23 @@ import React from "react";
 import { useMutation } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Activity, Loader2, CheckCircle2, XCircle, Globe, MapPin, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function DiagnosticsPanel() {
   const [result, setResult] = React.useState(null);
+  const [proxyMode, setProxyMode] = React.useState("default");
+  const [countryCode, setCountryCode] = React.useState("");
   const mut = useMutation({
-    mutationFn: () => base44.functions.invoke("runDiagnostics", {}),
+    mutationFn: () => base44.functions.invoke("runDiagnostics", {
+      override: proxyMode === "default" ? undefined : {
+        proxy_mode: proxyMode,
+        country_code: countryCode.trim() || undefined,
+      },
+    }),
     onSuccess: (res) => setResult(res?.data || res),
     onError: (e) => setResult({ ok: false, error: e?.response?.data?.error || e.message }),
   });
@@ -27,6 +37,24 @@ export default function DiagnosticsPanel() {
           {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
           {mut.isPending ? "Probing…" : "Run probe"}
         </Button>
+      </div>
+
+      <div className="grid sm:grid-cols-[1fr_160px] gap-3 rounded-md border border-border bg-background/40 p-3">
+        <Field label="Probe proxy mode" help="Default uses global settings.">
+          <Select value={proxyMode} onValueChange={setProxyMode}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Default</SelectItem>
+              <SelectItem value="classic">Classic</SelectItem>
+              <SelectItem value="premium">Premium</SelectItem>
+              <SelectItem value="stealth">Stealth</SelectItem>
+              <SelectItem value="none">None</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Country" help="Premium / stealth only.">
+          <Input value={countryCode} onChange={(e) => setCountryCode(e.target.value.toLowerCase())} placeholder="au" className="font-mono text-xs" />
+        </Field>
       </div>
 
       {result && (
@@ -62,6 +90,16 @@ export default function DiagnosticsPanel() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function Field({ label, help, children }) {
+  return (
+    <div className="grid gap-1">
+      <Label className="text-[11px]">{label}</Label>
+      {children}
+      {help && <p className="text-[10px] text-muted-foreground leading-snug">{help}</p>}
     </div>
   );
 }

@@ -1,26 +1,19 @@
 // Fully-automatic auto-heal job. Runs on a schedule. For each non-terminal run:
-//   1. Detect stuck rows (status='running' for >IDLE_MAX_MS) and re-queue them.
-//   2. If error rate on completed rows is high (>HIGH_ERROR_RATE) AND most
-//      errors are 'blocked' (IP block / captcha) — rotate the run's proxy
-//      (toggles sticky off, switches preset) so subsequent claimed batches
-//      get fresh IPs.
-//   3. Reset 'queued'/'error' counts when re-queuing so the worker picks
-//      them back up.
+//   1. Detect stuck rows (status='running' for >IDLE_MAX_MS) and re-queue them
+//      so the worker picks them back up.
 // All actions are logged to ActionLog with category='system'.
+//
+// Note: previous versions also auto-rotated proxies on high block rates by
+// flipping legacy `proxy_sticky` / `proxy_preset` fields. Those fields no
+// longer exist on TestRun (the ScrapingBee model uses `proxy_mode` /
+// `country_code` / `external_proxy_id`), so that path was removed. If
+// auto-rotation is wanted again it should toggle proxy_mode between
+// 'premium' and 'stealth'.
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const IDLE_MAX_MS = 4 * 60 * 1000;        // 4 min — a row pinned to 'running' this long is dead
 const STUCK_RECLAIM_BUDGET = 200;          // safety cap per run per cycle
-const HIGH_ERROR_RATE = 0.5;               // 50%+ errored → rotate proxy
-const MIN_SAMPLES_FOR_ROTATION = 10;       // need at least N completed rows to judge
-
-const BLOCKED_KEYWORDS = ['captcha', 'forbidden', 'access.?denied', 'ip.?block', 'cloudflare', 'rate.?limit'];
-function isBlockedMsg(msg) {
-  if (!msg) return false;
-  const lower = msg.toLowerCase();
-  return BLOCKED_KEYWORDS.some((k) => new RegExp(k).test(lower));
-}
 
 async function log(base44, message, level = 'info') {
   try {
@@ -34,10 +27,11 @@ async function log(base44, message, level = 'info') {
 }
 
 async function healOneRun(base44, run) {
-  const summary = { run_id: run.id, requeued_stuck: 0, rotated_proxy: false, notes: [] };
+  const summary = { run_id: run.id, requeued_stuck: 0, notes: [] };
   const now = Date.now();
 
-  // ---- 1. Stuck rows ----
+  // Stuck rows: rows pinned to 'running' for too long get re-queued so the
+  // worker picks them up again.
   const running = await base44.asServiceRole.entities.TestResult.filter(
     { run_id: run.id, status: 'running' }, '-tested_at', STUCK_RECLAIM_BUDGET
   );
@@ -56,37 +50,6 @@ async function healOneRun(base44, run) {
     summary.requeued_stuck = stuck.length;
     summary.notes.push(`Reclaimed ${stuck.length} stuck rows`);
     await log(base44, `Auto-heal: reclaimed ${stuck.length} stuck rows for run ${run.id}`, 'warn');
-  }
-
-  // ---- 2. High block rate → rotate proxy ----
-  // Sample the last 50 errored rows and see if most look "blocked".
-  const errored = await base44.asServiceRole.entities.TestResult.filter(
-    { run_id: run.id, status: 'error' }, '-tested_at', 50
-  );
-  const totalCompleted = (run.working_count || 0) + (run.failed_count || 0) + (run.error_count || 0);
-  if (totalCompleted >= MIN_SAMPLES_FOR_ROTATION && errored.length >= MIN_SAMPLES_FOR_ROTATION) {
-    const errorRate = (run.error_count || 0) / totalCompleted;
-    const blockedCount = errored.filter((r) => isBlockedMsg(r.error_message)).length;
-    const blockedRatio = blockedCount / errored.length;
-
-    if (errorRate > HIGH_ERROR_RATE && blockedRatio > 0.5) {
-      // Rotate: flip sticky off + cycle preset. Conservative — we don't change
-      // country, just force fresh IPs on the next claimed batches.
-      const update = {};
-      if (run.proxy_sticky !== false) update.proxy_sticky = false;
-      if (run.proxy_preset === 'none' || !run.proxy_preset) update.proxy_preset = 'px_ipv6';
-      else update.proxy_preset = 'none';
-      if (Object.keys(update).length > 0) {
-        await base44.asServiceRole.entities.TestRun.update(run.id, update);
-        summary.rotated_proxy = true;
-        summary.notes.push(`Rotated proxy: sticky=${update.proxy_sticky}, preset=${update.proxy_preset}`);
-        await log(
-          base44,
-          `Auto-heal: rotated proxy for run ${run.id} (error rate ${(errorRate*100).toFixed(0)}%, blocked ratio ${(blockedRatio*100).toFixed(0)}%)`,
-          'warn'
-        );
-      }
-    }
   }
 
   return summary;
@@ -115,7 +78,7 @@ Deno.serve(async (req) => {
     for (const run of active) {
       try {
         const s = await healOneRun(base44, run);
-        if (s.requeued_stuck > 0 || s.rotated_proxy) summaries.push(s);
+        if (s.requeued_stuck > 0) summaries.push(s);
       } catch (e) {
         await log(base44, `Auto-heal failed for run ${run.id}: ${e.message}`, 'error');
       }

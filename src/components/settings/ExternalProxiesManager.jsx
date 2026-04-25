@@ -183,7 +183,7 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           <F label="Region" help="Informational tag (e.g. AU, US-East). Not used for routing.">
             <Input value={draft.region || ""} onChange={(e) => setDraft({ ...draft, region: e.target.value })} placeholder="AU" />
           </F>
-          <F label="Protocol" help="Must match what your proxy provider supports. WireGuard entries are tested for endpoint reachability only — Browserless can't terminate WireGuard natively.">
+          <F label="Protocol" help="Must match what your proxy provider supports. WireGuard entries are tested for endpoint reachability only — ScrapingBee can't terminate WireGuard natively.">
             <Select value={draft.protocol || "http"} onValueChange={(v) => setDraft({ ...draft, protocol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -203,7 +203,7 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           <F label="Username" help="Leave blank for open proxies.">
             <Input value={draft.username || ""} onChange={(e) => setDraft({ ...draft, username: e.target.value })} placeholder="optional" />
           </F>
-          <F label="Password" help="Stored as-is; sent to Browserless over HTTPS.">
+          <F label="Password" help="Stored as-is; forwarded to ScrapingBee as own_proxy over HTTPS.">
             <Input type="password" value={draft.password || ""} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="optional" />
           </F>
           {draft.protocol === "wireguard" && (

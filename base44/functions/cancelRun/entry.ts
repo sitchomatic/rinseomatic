@@ -30,8 +30,13 @@ Deno.serve(async (req) => {
     const { run_id } = await req.json();
     if (!run_id) return Response.json({ error: 'Missing run_id' }, { status: 400 });
 
-    const runs = await base44.asServiceRole.entities.TestRun.filter({ id: run_id });
-    const run = runs[0];
+    // SDK throws on malformed ObjectIDs — treat that as "not found" rather
+    // than leaking a 500 to the UI.
+    let run = null;
+    try {
+      const runs = await base44.asServiceRole.entities.TestRun.filter({ id: run_id });
+      run = runs[0] || null;
+    } catch (_e) {}
     if (!run) return Response.json({ error: 'Run not found' }, { status: 404 });
 
     if (run.status === 'completed' || run.status === 'cancelled' || run.status === 'failed') {

@@ -65,7 +65,7 @@ export function installNetworkInterceptor() {
         body: reqBody,
         pending: true,
       });
-      entryId = e.id;
+      entryId = e?.id || null;
     }
 
     const start = performance.now();

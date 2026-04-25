@@ -6,6 +6,8 @@
 // Subscribers are notified on every push via a tiny pub-sub. The store is
 // capped at MAX entries; oldest are dropped first (newest first in the array).
 
+import { getTerminalSettings } from "@/lib/terminalSettings";
+
 const MAX = 1000;
 let buffer = [];
 let nextId = 1;
@@ -16,6 +18,15 @@ function notify() {
 }
 
 export function pushEntry(entry) {
+  const s = getTerminalSettings();
+  if (entry.kind === "req" || entry.kind === "res") {
+    if (!s.captureFetch) return null;
+  } else if (entry.kind === "ws" || entry.kind === "sse") {
+    if (!s.captureSockets) return null;
+  } else if (entry.kind === "log") {
+    if (!s.captureActionLogs) return null;
+  }
+
   const e = { id: `t${nextId++}`, ts: Date.now(), ...entry };
   buffer = [e, ...buffer];
   if (buffer.length > MAX) buffer = buffer.slice(0, MAX);

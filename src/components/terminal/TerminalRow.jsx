@@ -28,13 +28,13 @@ function formatBody(body) {
   try { return JSON.stringify(body, null, 2); } catch { return String(body); }
 }
 
-export default function TerminalRow({ entry }) {
+export default function TerminalRow({ entry, showPayloads = true }) {
   const [open, setOpen] = React.useState(false);
   const ts = format(new Date(entry.ts), "HH:mm:ss.SSS");
 
   // --- request ---
   if (entry.kind === "req") {
-    const expandable = entry.body != null;
+    const expandable = showPayloads && entry.body != null;
     return (
       <div className="border-l-2 border-sky-500/40">
         <button
@@ -68,7 +68,7 @@ export default function TerminalRow({ entry }) {
     const tone = entry.ok ? "text-emerald-300" : "text-rose-300";
     const arrowTone = entry.ok ? "text-emerald-400" : "text-rose-400";
     const borderTone = entry.ok ? "border-emerald-500/40" : "border-rose-500/40";
-    const expandable = entry.body != null || entry.error;
+    const expandable = showPayloads && (entry.body != null || entry.error);
     return (
       <div className={cn("border-l-2", borderTone)}>
         <button
@@ -107,7 +107,7 @@ export default function TerminalRow({ entry }) {
     const tone = isErr ? "text-rose-300" : isMsg ? "text-violet-300" : "text-fuchsia-300";
     const borderTone = isErr ? "border-rose-500/40" : "border-violet-500/40";
     const Icon = entry.kind === "sse" ? Zap : Radio;
-    const expandable = entry.body != null;
+    const expandable = showPayloads && entry.body != null;
     const label = `${entry.kind.toUpperCase()} ${entry.phase}`;
     return (
       <div className={cn("border-l-2", borderTone)}>

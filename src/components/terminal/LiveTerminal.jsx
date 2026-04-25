@@ -2,6 +2,7 @@ import React from "react";
 import { Terminal as TerminalIcon, X, Trash2, Pause, Play, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { subscribe, clear as clearStore } from "@/lib/terminalStore";
+import { subscribeTerminalSettings, getTerminalSettings } from "@/lib/terminalSettings";
 import TerminalRow from "@/components/terminal/TerminalRow";
 
 const FILTERS = [
@@ -22,6 +23,7 @@ export default function LiveTerminal() {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState("all");
   const [entries, setEntries] = React.useState([]);
+  const [settings, setSettings] = React.useState(() => getTerminalSettings());
   const [height, setHeight] = React.useState(320);
   const [collapsed, setCollapsed] = React.useState(false);
   const liveBufferRef = React.useRef([]);
@@ -40,6 +42,18 @@ export default function LiveTerminal() {
   React.useEffect(() => {
     if (!paused) setEntries(liveBufferRef.current);
   }, [paused]);
+
+  React.useEffect(() => subscribeTerminalSettings(setSettings), []);
+
+  React.useEffect(() => {
+    if (!settings.openOnError) return;
+    const latest = entries[0];
+    if (!latest) return;
+    const isError = (latest.kind === "res" && !latest.ok) ||
+      (latest.kind === "log" && latest.level === "error") ||
+      ((latest.kind === "ws" || latest.kind === "sse") && latest.phase === "error");
+    if (isError) setOpen(true);
+  }, [entries, settings.openOnError]);
 
   // Hotkey: backtick toggles the terminal. Ignore when typing in an input.
   React.useEffect(() => {
@@ -200,7 +214,7 @@ export default function LiveTerminal() {
                 : "Nothing matches the current filter."}
             </div>
           ) : (
-            filtered.map((e) => <TerminalRow key={e.id} entry={e} />)
+            filtered.map((e) => <TerminalRow key={e.id} entry={e} showPayloads={settings.showPayloads} />)
           )}
         </div>
       )}

@@ -9,7 +9,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // ScrapingBee via own_proxy. A direct TCP probe is faster, cheaper, and
 // matches the approach used in testWireguardProxy.
 
-async function tcpProbe(host, port, timeoutMs = 5000) {
+async function tcpProbe(host, port, timeoutMs) {
   const started = Date.now();
   try {
     const conn = await Promise.race([
@@ -41,6 +41,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
+    const settings = settingsRows[0] || {};
+    const timeoutMs = Math.max(1000, Math.min(30000, Number(settings.proxy_ping_timeout_ms) || 5000));
+
     const proxies = await base44.asServiceRole.entities.Proxy.list('-created_date', 200);
     // WireGuard entries have their own dedicated tester (testWireguardProxy)
     // that parses the .conf file. Skip them here so we don't false-flag them
@@ -55,7 +59,7 @@ Deno.serve(async (req) => {
 
     // allSettled so a single timed-out proxy doesn't hold up the rest.
     const results = await Promise.allSettled(targets.map(async (p) => {
-      const r = await tcpProbe(p.host, p.port, 5000);
+      const r = await tcpProbe(p.host, p.port, timeoutMs);
       const status = classify(r.ok, r.latency);
       await base44.asServiceRole.entities.Proxy.update(p.id, {
         status,

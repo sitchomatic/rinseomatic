@@ -12,7 +12,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // MAX_PARALLEL_RUNS: hard ceiling on ScrapingBee fan-out per cron tick.
 // Beyond this, queued runs simply wait until the next tick. Keeps us from
 // stampeding our ScrapingBee quota when 50 runs are simultaneously in flight.
-const MAX_PARALLEL_RUNS = 10;
+const DEFAULT_MAX_PARALLEL_RUNS = 10;
 
 Deno.serve(async (req) => {
   try {
@@ -25,6 +25,10 @@ Deno.serve(async (req) => {
     if (user && user.role !== 'admin') {
       return Response.json({ error: 'Admin only' }, { status: 403 });
     }
+
+    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
+    const settings = settingsRows[0] || {};
+    const maxParallelRuns = Math.max(1, Math.min(50, Number(settings.worker_max_parallel_runs) || DEFAULT_MAX_PARALLEL_RUNS));
 
     const queued = await base44.asServiceRole.entities.TestRun.filter({ status: 'queued' }, '-created_date', 50);
     const running = await base44.asServiceRole.entities.TestRun.filter({ status: 'running' }, '-created_date', 50);
@@ -39,7 +43,7 @@ Deno.serve(async (req) => {
     // the next, blocking fast runs behind slow ones. With the ceiling, we
     // simply truncate to the top N most-recent active runs; the rest get
     // picked up on the next 5-minute tick.
-    const slice = active.slice(0, MAX_PARALLEL_RUNS);
+    const slice = active.slice(0, maxParallelRuns);
     const results = await Promise.allSettled(slice.map((run) =>
       base44.asServiceRole.functions.invoke('runWorker', { run_id: run.id })
     ));

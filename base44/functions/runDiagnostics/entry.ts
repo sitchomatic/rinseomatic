@@ -28,7 +28,7 @@ function buildScrapingBeeProbeUrl(apiKey, settings, override) {
   params.set('url', 'https://ipinfo.io/json');
   // ipinfo returns plain JSON — no JS rendering needed.
   params.set('render_js', 'false');
-  params.set('timeout', '30000');
+  params.set('timeout', String(Math.max(1000, Math.min(140000, Number(settings.diagnostics_probe_timeout_ms) || 30000))));
 
   if (mode === 'premium') {
     params.set('premium_proxy', 'true');

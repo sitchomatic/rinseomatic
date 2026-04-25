@@ -12,8 +12,8 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const IDLE_MAX_MS = 4 * 60 * 1000;        // 4 min — a row pinned to 'running' this long is dead
-const STUCK_RECLAIM_BUDGET = 200;          // safety cap per run per cycle
+const DEFAULT_IDLE_MAX_MS = 4 * 60 * 1000;        // 4 min — a row pinned to 'running' this long is dead
+const DEFAULT_STUCK_RECLAIM_BUDGET = 200;          // safety cap per run per cycle
 
 async function log(base44, message, level = 'info') {
   try {
@@ -26,18 +26,20 @@ async function log(base44, message, level = 'info') {
   } catch (_) { /* logging is best-effort */ }
 }
 
-async function healOneRun(base44, run) {
+async function healOneRun(base44, run, settings) {
   const summary = { run_id: run.id, requeued_stuck: 0, notes: [] };
   const now = Date.now();
+  const idleMaxMs = Math.max(60000, Number(settings.auto_heal_idle_max_ms) || DEFAULT_IDLE_MAX_MS);
+  const reclaimBudget = Math.max(1, Math.min(1000, Number(settings.auto_heal_reclaim_budget) || DEFAULT_STUCK_RECLAIM_BUDGET));
 
   // Stuck rows: rows pinned to 'running' for too long get re-queued so the
   // worker picks them up again.
   const running = await base44.asServiceRole.entities.TestResult.filter(
-    { run_id: run.id, status: 'running' }, '-tested_at', STUCK_RECLAIM_BUDGET
+    { run_id: run.id, status: 'running' }, '-tested_at', reclaimBudget
   );
   const stuck = running.filter((r) => {
     const t = r.started_at ? new Date(r.started_at).getTime() : (r.tested_at ? new Date(r.tested_at).getTime() : 0);
-    return t > 0 && now - t > IDLE_MAX_MS;
+    return t > 0 && now - t > idleMaxMs;
   });
 
   if (stuck.length > 0) {
@@ -66,6 +68,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
+    const settings = settingsRows[0] || {};
+
     const active = await base44.asServiceRole.entities.TestRun.filter(
       { status: { $in: ['running', 'queued'] } }, '-created_date', 50
     );
@@ -77,7 +82,7 @@ Deno.serve(async (req) => {
     const summaries = [];
     for (const run of active) {
       try {
-        const s = await healOneRun(base44, run);
+        const s = await healOneRun(base44, run, settings);
         if (s.requeued_stuck > 0) summaries.push(s);
       } catch (e) {
         await log(base44, `Auto-heal failed for run ${run.id}: ${e.message}`, 'error');

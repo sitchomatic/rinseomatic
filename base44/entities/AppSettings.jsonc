@@ -25,16 +25,16 @@
         "none"
       ],
       "default": "premium",
-      "description": "ScrapingBee proxy tier. 'classic' = default datacenter pool (5 credits). 'premium' = residential/premium pool, premium_proxy=true (25 credits). 'stealth' = stealth_proxy=true (75 credits, hardest sites). 'external' = own_proxy. 'none' = render_js=false direct."
+      "description": "ScrapingBee proxy tier."
     },
     "country_code": {
       "type": "string",
       "default": "au",
-      "description": "ISO 3166-1 alpha-2 country code passed as country_code (e.g. 'au', 'us', 'gb'). Requires premium or stealth proxy on ScrapingBee."
+      "description": "ISO 3166-1 alpha-2 country code passed as country_code."
     },
     "external_proxy_id": {
       "type": "string",
-      "description": "ID of Proxy entity to use when proxy_mode='external'. Sent to ScrapingBee as own_proxy=<scheme>://user:pass@host:port."
+      "description": "ID of Proxy entity to use when proxy_mode='external'."
     },
     "block_ads": {
       "type": "boolean",
@@ -44,21 +44,21 @@
     "block_resources": {
       "type": "boolean",
       "default": true,
-      "description": "ScrapingBee block_resources parameter \u2014 blocks images/CSS for faster loads. Default ON in ScrapingBee."
+      "description": "ScrapingBee block_resources parameter."
     },
     "timeout_ms": {
       "type": "number",
       "default": 60000,
-      "description": "Max ScrapingBee request duration (ms). ScrapingBee 'timeout' param. Capped at 140000 by ScrapingBee."
+      "description": "Max ScrapingBee request duration in milliseconds."
     },
     "wait_after_load_ms": {
       "type": "number",
       "default": 0,
-      "description": "ScrapingBee 'wait' parameter \u2014 extra time after page load before instructions start."
+      "description": "ScrapingBee wait parameter."
     },
     "user_agent": {
       "type": "string",
-      "description": "Optional. Forwarded via forward_headers when set."
+      "description": "Optional user-agent forwarded via forward_headers when set."
     },
     "viewport_width": {
       "type": "number",
@@ -78,12 +78,37 @@
         "all_passwords"
       ],
       "default": "multi_password",
-      "description": "Default strategy: try one password, or try multiple until one works, or test every password."
+      "description": "Default password strategy."
     },
     "capture_screenshots": {
       "type": "boolean",
       "default": false,
-      "description": "Capture a screenshot after each login attempt (ScrapingBee screenshot=true, costs +1 credit)."
+      "description": "Capture a screenshot after each login attempt."
+    },
+    "worker_max_parallel_runs": {
+      "type": "number",
+      "default": 10,
+      "description": "Maximum active test runs processed per scheduled worker tick."
+    },
+    "auto_heal_idle_max_ms": {
+      "type": "number",
+      "default": 240000,
+      "description": "How long a row may remain running before auto-heal requeues it."
+    },
+    "auto_heal_reclaim_budget": {
+      "type": "number",
+      "default": 200,
+      "description": "Maximum stuck rows reclaimed per run per auto-heal cycle."
+    },
+    "proxy_ping_timeout_ms": {
+      "type": "number",
+      "default": 5000,
+      "description": "TCP timeout used by proxy health checks."
+    },
+    "diagnostics_probe_timeout_ms": {
+      "type": "number",
+      "default": 30000,
+      "description": "ScrapingBee timeout used by diagnostics probes."
     }
   },
   "rls": {

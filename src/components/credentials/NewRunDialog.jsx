@@ -20,17 +20,28 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
   const [maxRetries, setMaxRetries] = React.useState(1);
   const [strategy, setStrategy] = React.useState("multi_password");
   const [customUrl, setCustomUrl] = React.useState("");
+  const [proxyMode, setProxyMode] = React.useState("default");
+  const [countryCode, setCountryCode] = React.useState("");
+  const [externalProxyId, setExternalProxyId] = React.useState("");
 
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
     staleTime: 5 * 60_000,
   });
+  const { data: proxies = [] } = useQuery({
+    queryKey: ["proxies"],
+    queryFn: () => base44.entities.Proxy.list("-created_date", 100),
+    staleTime: 60_000,
+  });
 
   React.useEffect(() => {
     if (open) {
       setLabel(`Run · ${format(new Date(), "MMM d HH:mm")}`);
       setCustomUrl("");
+      setProxyMode("default");
+      setCountryCode("");
+      setExternalProxyId("");
     }
   }, [open]);
 
@@ -64,6 +75,9 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
         concurrency: Math.max(1, Math.min(5, Number(concurrency) || 2)),
         max_retries: Math.max(0, Math.min(5, Number(maxRetries) || 1)),
         login_strategy: strategy,
+        proxy_mode: proxyMode === "default" ? undefined : proxyMode,
+        country_code: countryCode.trim() || undefined,
+        external_proxy_id: externalProxyId || undefined,
         total_count: creds.length,
         pending_count: creds.length,
         working_count: 0,
@@ -144,6 +158,38 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
                 </SelectContent>
               </Select>
             </Field>
+          </div>
+
+          <div className="rounded-md border border-border bg-background/40 p-3 space-y-3">
+            <div className="text-xs font-medium">Proxy override</div>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Proxy mode" help="Default uses the global Settings value.">
+                <Select value={proxyMode} onValueChange={setProxyMode}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="classic">Classic</SelectItem>
+                    <SelectItem value="premium">Premium</SelectItem>
+                    <SelectItem value="stealth">Stealth</SelectItem>
+                    <SelectItem value="external">External</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Country" help="Used by premium / stealth.">
+                <Input value={countryCode} onChange={(e) => setCountryCode(e.target.value.toLowerCase())} placeholder="au" className="font-mono text-xs" />
+              </Field>
+              <Field label="External proxy" help="Used when mode is External.">
+                <Select value={externalProxyId} onValueChange={setExternalProxyId} disabled={proxyMode !== "external"}>
+                  <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {proxies.filter((p) => p.enabled !== false).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.label || `${p.host}:${p.port}`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
           </div>
         </div>
 

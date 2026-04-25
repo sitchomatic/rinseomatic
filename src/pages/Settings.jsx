@@ -25,6 +25,8 @@ const BLANK = {
   login_url_marker: "/login",
   success_url_contains: "",
   wait_after_submit_ms: 3500,
+  secondary_site_keys: [],
+  skip_primary: false,
   enabled: true,
   lenient_success: false,
 };
@@ -152,6 +154,8 @@ export default function Settings() {
                 <div>pass: <span className="text-foreground/80 truncate inline-block max-w-full align-bottom">{s.password_selector}</span></div>
                 <div>submit: <span className="text-foreground/80 truncate inline-block max-w-full align-bottom">{s.submit_selector}</span></div>
                 <div>success: <span className="text-foreground/80 truncate inline-block max-w-full align-bottom">{s.success_selector}</span></div>
+                <div>secondary: <span className="text-foreground/80 truncate inline-block max-w-full align-bottom">{s.secondary_site_keys?.length ? s.secondary_site_keys.join(", ") : "—"}</span></div>
+                <div>primary: <span className="text-foreground/80 truncate inline-block max-w-full align-bottom">{s.skip_primary ? "skipped" : "enabled"}</span></div>
               </div>
             </div>
           ))}
@@ -216,6 +220,23 @@ export default function Settings() {
             help="How long to wait after clicking submit before checking for success. Increase for slow sites; decrease to speed up testing."
             value={draft.wait_after_submit_ms} onChange={(v) => setDraft({ ...draft, wait_after_submit_ms: Number(v) || 0 })}
           />
+          <Field
+            label="Secondary site keys" mono
+            help="Optional comma-separated site keys to also test this credential against (used for aggregator sites)."
+            value={(draft.secondary_site_keys || []).join(", ")}
+            onChange={(v) => setDraft({ ...draft, secondary_site_keys: v.split(",").map((x) => x.trim()).filter(Boolean) })}
+          />
+
+          <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/40 px-3 py-2"
+            title="For aggregator records, skip this site's own login URL and only test the secondary site keys.">
+            <div>
+              <div className="text-xs">Skip primary login</div>
+              <div className="text-[10px] text-muted-foreground leading-snug mt-0.5">
+                {draft.skip_primary ? "Only secondary site keys will be tested." : "This site's own login URL will be tested first."}
+              </div>
+            </div>
+            <Switch checked={!!draft.skip_primary} onCheckedChange={(v) => setDraft({ ...draft, skip_primary: v })} />
+          </label>
 
           <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/40 px-3 py-2"
             title="Off (default): a credential is only 'working' when the success selector or success URL is matched. On: also count any non-login URL (that wasn't blocked) as working — convenient but causes false positives.">

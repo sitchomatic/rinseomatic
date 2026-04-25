@@ -141,6 +141,15 @@ export default function ProxySettingsPanel({ proxies = [] }) {
           />
         </Field>
 
+        <Field label="User agent" help="Optional browser user-agent forwarded to ScrapingBee when set.">
+          <Input
+            value={draft.user_agent || ""}
+            onChange={(e) => setDraft({ ...draft, user_agent: e.target.value })}
+            placeholder="leave blank for ScrapingBee default"
+            className="font-mono text-xs"
+          />
+        </Field>
+
         <Field label="Viewport width" help="window_width param.">
           <Input
             type="number"

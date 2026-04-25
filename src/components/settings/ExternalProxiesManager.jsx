@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
-const BLANK = { label: "", host: "", port: 8080, protocol: "http", username: "", password: "", region: "", enabled: true };
+const BLANK = { label: "", host: "", port: 8080, protocol: "http", username: "", password: "", region: "", rotation_weight: 1, enabled: true };
 
 const HEALTH_STYLES = {
   healthy: { dot: "bg-emerald-400", text: "text-emerald-300", label: "Healthy" },
@@ -182,6 +182,9 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           </F>
           <F label="Region" help="Informational tag (e.g. AU, US-East). Not used for routing.">
             <Input value={draft.region || ""} onChange={(e) => setDraft({ ...draft, region: e.target.value })} placeholder="AU" />
+          </F>
+          <F label="Rotation weight" help="Used by weighted proxy pools and future rotation logic. Higher = picked more often.">
+            <Input type="number" min={1} value={draft.rotation_weight ?? 1} onChange={(e) => setDraft({ ...draft, rotation_weight: Number(e.target.value) || 1 })} />
           </F>
           <F label="Protocol" help="Must match what your proxy provider supports. WireGuard entries are tested for endpoint reachability only — ScrapingBee can't terminate WireGuard natively.">
             <Select value={draft.protocol || "http"} onValueChange={(v) => setDraft({ ...draft, protocol: v })}>

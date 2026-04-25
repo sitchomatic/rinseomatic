@@ -45,9 +45,14 @@ export default function RunDetail() {
 
   const cancelMut = useMutation({
     mutationFn: async () => {
-      await base44.entities.TestRun.update(id, { status: "cancelled", ended_at: new Date().toISOString() });
       const queued = await base44.entities.TestResult.filter({ run_id: id, status: "queued" }, "-created_date", 5000);
       await Promise.all(queued.map((r) => base44.entities.TestResult.update(r.id, { status: "error", error_message: "Cancelled" })));
+      await base44.entities.TestRun.update(id, {
+        status: "cancelled",
+        ended_at: new Date().toISOString(),
+        pending_count: 0,
+        error_count: (run?.error_count || 0) + queued.length,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["test-run", id] });
@@ -111,7 +116,7 @@ export default function RunDetail() {
       <PageHeader
         eyebrow={<span className="flex items-center gap-2"><SiteChip siteKey={run.site_key} label={siteLabel} size="sm" /> · run detail</span>}
         title={run.label || "Untitled run"}
-        description={`${run.total_count} credentials · concurrency ${run.concurrency} · ${run.max_retries ?? 1} retry`}
+        description={`${run.total_count} credentials · concurrency ${run.concurrency} · ${run.max_retries ?? 1} ${(run.max_retries ?? 1) === 1 ? "retry" : "retries"}`}
         actions={
           <>
             <StatusPill status={run.status} />

@@ -27,7 +27,7 @@ export default function Runs() {
       <PageHeader
         eyebrow="02 · queue"
         title="Test runs"
-        description="Manual batches tested via ScrapingBee. Runs persist — safe to close this tab."
+        description="Manual batches tested via Browserless. Runs persist — safe to close this tab."
         actions={
           <Button size="sm" className="gap-2" onClick={() => navigate("/credentials")}>
             <Play className="h-3.5 w-3.5" /> New run
@@ -43,7 +43,7 @@ export default function Runs() {
         <EmptyState
           icon={Play}
           title="No test runs yet"
-          description="Pick credentials in the vault and kick off a batch to test them against ScrapingBee."
+          description="Pick credentials in the vault and kick off a batch to test them via Browserless."
           action={
             <Button size="sm" className="gap-2" onClick={() => navigate("/credentials")}>
               <Play className="h-3.5 w-3.5" /> Start a run

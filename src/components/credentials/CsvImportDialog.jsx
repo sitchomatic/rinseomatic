@@ -4,19 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Upload } from "lucide-react";
+import { parseCSV } from "@/lib/csv";
 
 function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return [];
-  const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
-  const uIdx = header.findIndex((h) => ["username", "email", "user"].includes(h));
-  const pIdx = header.findIndex((h) => ["password", "pass"].includes(h));
+  const rows = parseCSV(text);
+  if (rows.length === 0) return [];
+  const headerCells = rows[0].map((h) => h.trim().toLowerCase());
+  const uIdx = headerCells.findIndex((h) => ["username", "email", "user"].includes(h));
+  const pIdx = headerCells.findIndex((h) => ["password", "pass"].includes(h));
   const hasHeader = uIdx !== -1 && pIdx !== -1;
-  const rows = hasHeader ? lines.slice(1) : lines;
-  return rows.map((line) => {
-    const parts = line.split(",").map((p) => p.trim());
-    if (hasHeader) return { username: parts[uIdx], password: parts[pIdx] };
-    return { username: parts[0], password: parts[1] };
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  return dataRows.map((cells) => {
+    if (hasHeader) return { username: (cells[uIdx] || "").trim(), password: (cells[pIdx] || "").trim() };
+    return { username: (cells[0] || "").trim(), password: (cells[1] || "").trim() };
   }).filter((r) => r.username && r.password);
 }
 

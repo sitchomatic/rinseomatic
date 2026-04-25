@@ -80,7 +80,10 @@ export default function Credentials() {
 
   const startRun = async (opts) => {
     const { site_key, concurrency, max_retries, label, target_site_keys, custom_url, login_strategy, proxy } = opts;
-    const creds = selectedItems.length > 0 ? selectedItems : items.filter((c) => c.site_key === site_key);
+    // If user has an explicit selection, use that. Otherwise use the visible (filtered+searched) list for the chosen site.
+    const creds = selectedItems.length > 0
+      ? selectedItems
+      : filtered.filter((c) => c.site_key === site_key);
     if (creds.length === 0) return toast.error("No credentials for this site");
 
     const run = await base44.entities.TestRun.create({
@@ -114,8 +117,14 @@ export default function Credentials() {
     navigate(`/runs/${run.id}`);
   };
 
+  // Total counts (used in tabs)
   const siteCounts = sites.reduce((acc, s) => {
     acc[s.key] = items.filter((c) => c.site_key === s.key).length;
+    return acc;
+  }, {});
+  // Visible counts (used in run dialog so "Test all" reflects current filter/search)
+  const visibleSiteCounts = sites.reduce((acc, s) => {
+    acc[s.key] = filtered.filter((c) => c.site_key === s.key).length;
     return acc;
   }, {});
 
@@ -136,7 +145,7 @@ export default function Credentials() {
       <PageHeader
         eyebrow="01 · vault"
         title="Credentials"
-        description="Stored credentials tested against real sites via ScrapingBee."
+        description="Stored credentials tested against real sites via Browserless."
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setImportOpen(true)}>
@@ -277,7 +286,7 @@ export default function Credentials() {
         countsBySite={
           selectedItems.length > 0
             ? { [runSiteKey]: selectedItems.length }
-            : siteCounts
+            : visibleSiteCounts
         }
         onCreate={startRun}
       />

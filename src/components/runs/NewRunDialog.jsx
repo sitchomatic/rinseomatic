@@ -34,23 +34,33 @@ export default function NewRunDialog({
     enabled: open,
   });
 
+  // A2: Reset form ONLY on the dialog opening (the user-visible event).
+  // The previous deps included `countsBySite` (a fresh object each parent
+  // render) and `lockedTargetKeys` (a fresh array), causing the effect to
+  // re-run on parent re-renders and silently overwrite user input mid-edit.
+  // We intentionally read the latest values via refs so we don't need them
+  // as deps.
+  const initRef = React.useRef({ sites, defaultSiteKey, countsBySite, lockedTargetKeys });
+  initRef.current = { sites, defaultSiteKey, countsBySite, lockedTargetKeys };
+
   React.useEffect(() => {
     if (!open) return;
-    const bestSite = (sites || [])
-      .map((s) => ({ key: s.key, n: countsBySite?.[s.key] || 0 }))
+    const { sites: s, defaultSiteKey: d, countsBySite: cbs, lockedTargetKeys: ltk } = initRef.current;
+    const bestSite = (s || [])
+      .map((x) => ({ key: x.key, n: cbs?.[x.key] || 0 }))
       .sort((a, b) => b.n - a.n)[0];
-    const autoSite = bestSite && bestSite.n > 0 ? bestSite.key : sites?.[0]?.key;
+    const autoSite = bestSite && bestSite.n > 0 ? bestSite.key : s?.[0]?.key;
     setForm({
-      site_key: defaultSiteKey || autoSite || "",
+      site_key: d || autoSite || "",
       concurrency: 2,
       max_retries: 1,
       label: "",
-      target_key: lockedTargetKeys?.[0] || "default",
+      target_key: ltk?.[0] || "default",
       custom_url: "",
       login_strategy: "inherit",
       proxy: {},
     });
-  }, [open, sites, defaultSiteKey, countsBySite, lockedTargetKeys]);
+  }, [open]);
 
   const effectiveCount = countsBySite
     ? (countsBySite[form.site_key] || 0)

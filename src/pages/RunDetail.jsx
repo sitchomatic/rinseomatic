@@ -41,6 +41,7 @@ export default function RunDetail() {
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+    staleTime: 5 * 60_000,
   });
   const siteLabel = sites.find((s) => s.key === run?.site_key)?.label || run?.site_key;
 
@@ -48,32 +49,16 @@ export default function RunDetail() {
   // automation drives progress on the server every 5 minutes. The 2s poll on
   // `useQuery` above keeps the UI live while you watch.
 
+  // Server-side cancel — single backend round-trip, atomic, race-free with cron.
   const cancelMut = useMutation({
-    mutationFn: async () => {
-      // Cancel everything that hasn't reached a terminal state.
-      const all = await base44.entities.TestResult.filter({ run_id: id }, "-created_date", 5000);
-      const inFlight = all.filter((r) => r.status === "queued" || r.status === "running");
-      await Promise.all(inFlight.map((r) =>
-        base44.entities.TestResult.update(r.id, { status: "error", error_message: "Cancelled" })
-      ));
-      // Recount from the source of truth instead of relying on stale run counters.
-      const working = all.filter((r) => r.status === "working").length;
-      const failed = all.filter((r) => r.status === "failed").length;
-      const errored = all.filter((r) => r.status === "error").length + inFlight.length;
-      await base44.entities.TestRun.update(id, {
-        status: "cancelled",
-        ended_at: new Date().toISOString(),
-        pending_count: 0,
-        working_count: working,
-        failed_count: failed,
-        error_count: errored,
-      });
-    },
+    mutationFn: () => base44.functions.invoke("cancelRun", { run_id: id }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["test-run", id] });
       qc.invalidateQueries({ queryKey: ["test-results", id] });
+      qc.invalidateQueries({ queryKey: ["test-runs"] });
       toast.success("Run cancelled");
     },
+    onError: (e) => toast.error(e?.message || "Couldn't cancel run"),
   });
 
   // Delete run + cascade the result rows. Terminal-only — for active runs

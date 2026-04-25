@@ -12,28 +12,42 @@ import RecentRuns from "@/components/dashboard/RecentRuns";
 export default function Dashboard() {
   const { data: credentials = [], isLoading: loadingCreds } = useQuery({
     queryKey: ["credentials"],
-    queryFn: () => base44.entities.Credential.list("-created_date", 5000),
+    queryFn: () => base44.entities.Credential.list("-created_date", 10000),
+    staleTime: 30_000,
   });
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+    staleTime: 5 * 60_000,
   });
   const { data: runs = [] } = useQuery({
     queryKey: ["test-runs"],
     queryFn: () => base44.entities.TestRun.list("-created_date", 50),
+    staleTime: 30_000,
     refetchInterval: (q) => {
       const list = q.state.data || [];
       return list.some((r) => r.status === "running" || r.status === "queued") ? 5000 : false;
     },
   });
 
-  const total = credentials.length;
-  const working = credentials.filter((c) => c.status === "working").length;
-  const failed = credentials.filter((c) => c.status === "failed").length;
-  const errored = credentials.filter((c) => c.status === "error").length;
-  const untested = credentials.filter((c) => !c.status || c.status === "untested").length;
+  // C1: Single-pass aggregator over credentials — was 4 sequential filter()
+  // calls, each scanning the full array.
+  const { total, working, failed, errored, untested } = React.useMemo(() => {
+    let working = 0, failed = 0, errored = 0, untested = 0;
+    for (const c of credentials) {
+      if (c.status === "working") working++;
+      else if (c.status === "failed") failed++;
+      else if (c.status === "error") errored++;
+      else untested++; // null / undefined / "untested"
+    }
+    return { total: credentials.length, working, failed, errored, untested };
+  }, [credentials]);
+
   const pct = total ? Math.round((working / total) * 100) : 0;
-  const activeRuns = runs.filter((r) => r.status === "running" || r.status === "queued").length;
+  const activeRuns = React.useMemo(
+    () => runs.reduce((n, r) => n + (r.status === "running" || r.status === "queued" ? 1 : 0), 0),
+    [runs]
+  );
 
   return (
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">

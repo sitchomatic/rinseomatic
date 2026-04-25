@@ -14,6 +14,7 @@ export default function Runs() {
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["test-runs"],
     queryFn: () => base44.entities.TestRun.list("-created_date", 200),
+    staleTime: 30_000,
     // Only poll while there's at least one active run on screen.
     refetchInterval: (q) => {
       const list = q.state.data || [];
@@ -24,6 +25,7 @@ export default function Runs() {
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+    staleTime: 5 * 60_000,
   });
   const siteLabel = (k) => sites.find((s) => s.key === k)?.label || k;
 

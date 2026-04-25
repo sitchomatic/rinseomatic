@@ -282,18 +282,22 @@ Deno.serve(async (req) => {
     const site = sites[0];
     if (!site) return Response.json({ error: `Unknown site: ${site_key}` }, { status: 404 });
 
-    // Target sites
+    // Target sites — resolve all secondary keys in parallel instead of
+    // sequentially (A3/E7). 3-target aggregator runs save ~200-400ms here.
     const testSites = [];
     if (Array.isArray(target_site_keys) && target_site_keys.length > 0) {
-      for (const k of target_site_keys) {
-        const f = await base44.asServiceRole.entities.Site.filter({ key: k });
-        if (f[0]) testSites.push(f[0]);
-      }
+      const found = await Promise.all(
+        target_site_keys.map((k) => base44.asServiceRole.entities.Site.filter({ key: k }))
+      );
+      for (const f of found) if (f[0]) testSites.push(f[0]);
     } else {
       if (!site.skip_primary && site.login_url) testSites.push(site);
-      for (const k of (site.secondary_site_keys || [])) {
-        const f = await base44.asServiceRole.entities.Site.filter({ key: k });
-        if (f[0]) testSites.push(f[0]);
+      const keys = site.secondary_site_keys || [];
+      if (keys.length > 0) {
+        const found = await Promise.all(
+          keys.map((k) => base44.asServiceRole.entities.Site.filter({ key: k }))
+        );
+        for (const f of found) if (f[0]) testSites.push(f[0]);
       }
     }
     if (testSites.length === 0) {

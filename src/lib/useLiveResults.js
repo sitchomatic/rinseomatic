@@ -9,11 +9,18 @@ export function useLiveResults(runId) {
   const qc = useQueryClient();
   const key = ["test-results", runId];
 
+  // B2: Once a run reaches a terminal state, results don't change — we never
+  // need to refetch on remount. Active runs use 30s staleTime + the live
+  // subscription below for freshness. We only know terminality from the run
+  // entity (held in a sibling query), so we reach into the cache for it.
+  const runStatus = qc.getQueryData(["test-run", runId])?.status;
+  const isTerminal = runStatus === "completed" || runStatus === "failed" || runStatus === "cancelled";
+
   const query = useQuery({
     queryKey: key,
-    queryFn: () => base44.entities.TestResult.filter({ run_id: runId }, "-created_date", 5000),
+    queryFn: () => base44.entities.TestResult.filter({ run_id: runId }, "-created_date", 10000),
     enabled: !!runId,
-    staleTime: 30_000, // subscription handles freshness
+    staleTime: isTerminal ? Infinity : 30_000,
   });
 
   React.useEffect(() => {
@@ -26,6 +33,8 @@ export function useLiveResults(runId) {
         if (event.type === "delete") {
           return prev.filter((r) => r.id !== event.id);
         }
+        // E11: id-keyed dedupe via index lookup. Same row arriving twice
+        // (network retry, leader handover) collapses to a single entry.
         const idx = prev.findIndex((r) => r.id === row.id);
         if (idx === -1) return [row, ...prev];
         const next = prev.slice();

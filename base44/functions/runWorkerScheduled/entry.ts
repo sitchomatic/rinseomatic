@@ -9,7 +9,10 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const MAX_PARALLEL_RUNS = 4;
+// MAX_PARALLEL_RUNS: hard ceiling on Browserless fan-out per cron tick.
+// Beyond this, queued runs simply wait until the next tick. Keeps us from
+// stampeding our Browserless quota when 50 runs are simultaneously in flight.
+const MAX_PARALLEL_RUNS = 10;
 
 Deno.serve(async (req) => {
   try {
@@ -31,20 +34,21 @@ Deno.serve(async (req) => {
       return Response.json({ done: true, ran: 0 });
     }
 
-    let processed = 0;
-    for (let i = 0; i < active.length; i += MAX_PARALLEL_RUNS) {
-      const wave = active.slice(i, i + MAX_PARALLEL_RUNS);
-      await Promise.all(wave.map(async (run) => {
-        try {
-          await base44.asServiceRole.functions.invoke('runWorker', { run_id: run.id });
-          processed++;
-        } catch (e) {
-          console.error(`runWorker failed for ${run.id}:`, e?.message);
-        }
-      }));
-    }
+    // C3: Fire all up to the ceiling in parallel — no wave structure.
+    // Previous code waited for the slowest run in each wave before starting
+    // the next, blocking fast runs behind slow ones. With the ceiling, we
+    // simply truncate to the top N most-recent active runs; the rest get
+    // picked up on the next 5-minute tick.
+    const slice = active.slice(0, MAX_PARALLEL_RUNS);
+    const results = await Promise.allSettled(slice.map((run) =>
+      base44.asServiceRole.functions.invoke('runWorker', { run_id: run.id })
+    ));
+    const processed = results.filter((r) => r.status === 'fulfilled').length;
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.error(`runWorker failed for ${slice[i].id}:`, r.reason?.message);
+    });
 
-    return Response.json({ done: true, total: active.length, processed });
+    return Response.json({ done: true, total: active.length, processed, deferred: Math.max(0, active.length - slice.length) });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

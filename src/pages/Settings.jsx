@@ -32,10 +32,12 @@ export default function Settings() {
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
     queryFn: () => base44.entities.Site.list("-created_date", 100),
+    staleTime: 5 * 60_000,
   });
   const { data: proxies = [] } = useQuery({
     queryKey: ["proxies"],
     queryFn: () => base44.entities.Proxy.list("-created_date", 100),
+    staleTime: 60_000,
   });
 
   const [draft, setDraft] = React.useState(BLANK);

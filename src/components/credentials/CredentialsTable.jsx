@@ -2,8 +2,14 @@ import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import CredentialRow from "./CredentialRow";
+import VirtualCredentialList from "./VirtualCredentialList";
 import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
 import { cn } from "@/lib/utils";
+
+// Below this threshold, render the rows inline (cheaper than virtualization
+// boilerplate). Above it, switch to windowed rendering. 200 rows is well
+// within React's comfort zone for this row size.
+const VIRTUALIZE_THRESHOLD = 200;
 
 const COLUMNS = [
   { key: "username", label: "Username", sortable: true, accessor: (c) => (c.username || "").toLowerCase() },
@@ -81,20 +87,32 @@ export default function CredentialsTable({ items, sites, selected, onToggle, onT
         ))}
         <div></div>
       </div>
-      <div className="divide-y divide-border/60">
-        {sorted.map((c) => (
-          <CredentialRow
-            key={c.id}
-            c={c}
-            siteLabel={siteByKey[c.site_key]?.label}
-            selected={selected.has(c.id)}
-            onToggle={onToggle}
-            onDelete={onDelete}
-            copy={copy}
-            copiedKey={copiedKey}
-          />
-        ))}
-      </div>
+      {sorted.length > VIRTUALIZE_THRESHOLD ? (
+        <VirtualCredentialList
+          items={sorted}
+          siteByKey={siteByKey}
+          selected={selected}
+          onToggle={onToggle}
+          onDelete={onDelete}
+          copy={copy}
+          copiedKey={copiedKey}
+        />
+      ) : (
+        <div className="divide-y divide-border/60">
+          {sorted.map((c) => (
+            <CredentialRow
+              key={c.id}
+              c={c}
+              siteLabel={siteByKey[c.site_key]?.label}
+              selected={selected.has(c.id)}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              copy={copy}
+              copiedKey={copiedKey}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

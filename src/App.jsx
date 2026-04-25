@@ -1,4 +1,3 @@
-import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -50,7 +49,6 @@ function App() {
         <Router>
           <AuthenticatedApp />
         </Router>
-        <Toaster />
         <SonnerToaster theme="dark" position="bottom-right" />
       </QueryClientProvider>
     </AuthProvider>

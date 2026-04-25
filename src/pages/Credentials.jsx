@@ -16,6 +16,7 @@ import AggregatorQuickTest from "@/components/credentials/AggregatorQuickTest";
 import NewRunDialog from "@/components/runs/NewRunDialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useDebounce } from "@/lib/useDebounce";
 
 export default function Credentials() {
   const qc = useQueryClient();
@@ -37,7 +38,8 @@ export default function Credentials() {
 
   const { data: items = [], isLoading: itemsLoading } = useQuery({
     queryKey: ["credentials"],
-    queryFn: () => base44.entities.Credential.list("-created_date", 2000),
+    queryFn: () => base44.entities.Credential.list("-created_date", 10000),
+    staleTime: 30_000,
   });
 
   const createMut = useMutation({
@@ -61,14 +63,17 @@ export default function Credentials() {
     },
   });
 
+  // C2: Debounce search input — eliminates per-keystroke filter passes over
+  // 10k-row vaults. 250ms feels instant but collapses ~5 keystrokes into one.
+  const debouncedSearch = useDebounce(search, 250);
   const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return items.filter((c) => {
       if (siteFilter !== "all" && c.site_key !== siteFilter) return false;
       if (q && !(c.username || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [items, siteFilter, search]);
+  }, [items, siteFilter, debouncedSearch]);
 
   const toggle = (id) => setSelected((s) => {
     const n = new Set(s);

@@ -23,7 +23,7 @@ const ERROR_TONE = {
   "Rate limited":     "text-sky-300 border-sky-500/30 bg-sky-500/10",
   "Timeout":          "text-sky-300 border-sky-500/30 bg-sky-500/10",
   "Network":          "text-sky-300 border-sky-500/30 bg-sky-500/10",
-  "Browserless 5xx":  "text-sky-300 border-sky-500/30 bg-sky-500/10",
+  "ScrapingBee 5xx":  "text-sky-300 border-sky-500/30 bg-sky-500/10",
 };
 
 export default function ResultsTable({ results }) {

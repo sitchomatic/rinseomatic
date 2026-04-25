@@ -1,4 +1,4 @@
-// Classify a Browserless / network error message into a small set of
+// Classify a ScrapingBee / network error message into a small set of
 // useful buckets. Used by the worker to decide retry behaviour, and by the
 // UI to render a friendly tag.
 //
@@ -12,7 +12,7 @@ const PATTERNS = [
   { kind: 'transient', re: /\b(429|too many requests|rate.?limit)\b/i, label: 'Rate limited' },
   { kind: 'transient', re: /\b(timeout|timed.?out|etimedout|navigation: timeout)\b/i, label: 'Timeout' },
   { kind: 'transient', re: /\b(econnreset|enetunreach|socket hang up|network error)\b/i, label: 'Network' },
-  { kind: 'transient', re: /\bbrowserless 5\d\d\b/i, label: 'Browserless 5xx' },
+  { kind: 'transient', re: /\bscrapingbee 5\d\d\b/i, label: 'ScrapingBee 5xx' },
 
   // blocked
   { kind: 'blocked', re: /\b(captcha|challenge|cloudflare)\b/i, label: 'Captcha' },

@@ -33,7 +33,22 @@ Deno.serve(async (req) => {
 
     // Single-pass over all results — don't re-fetch.
     const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 10000);
-    const inFlight = all.filter((r) => r.status === 'queued' || r.status === 'running');
+
+    // L5 fix: Single-pass classification with applied transitions. Previously
+    // we counted `working/failed` from the pre-update snapshot AND added
+    // inFlight.length to errored — which double-counts if a row flipped to
+    // working/failed between the read and the write. Now we apply the
+    // queued/running → error transition in-memory, then tally once.
+    const inFlight = [];
+    let working = 0, failed = 0, errored = 0;
+    for (const r of all) {
+      if (r.status === 'queued' || r.status === 'running') {
+        inFlight.push(r);
+        errored++; // will become 'error'
+      } else if (r.status === 'working') working++;
+      else if (r.status === 'failed') failed++;
+      else if (r.status === 'error') errored++;
+    }
 
     await Promise.all(inFlight.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
@@ -42,11 +57,6 @@ Deno.serve(async (req) => {
         tested_at: new Date().toISOString(),
       })
     ));
-
-    // Recount once from the post-update snapshot.
-    const working = all.filter((r) => r.status === 'working').length;
-    const failed = all.filter((r) => r.status === 'failed').length;
-    const errored = all.filter((r) => r.status === 'error').length + inFlight.length;
 
     await base44.asServiceRole.entities.TestRun.update(run_id, {
       pending_count: 0,

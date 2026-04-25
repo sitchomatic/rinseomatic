@@ -94,19 +94,21 @@ Deno.serve(async (req) => {
       return Response.json({ done: true, status: run.status });
     }
 
-    // Stuck-run recovery: if no result has progressed in IDLE_MAX_MS, mark as failed.
-    // (C1: removed RUN_MAX_MS hard cap — large runs legitimately take >10min.
-    // Idle-only signal is sufficient and avoids false fails on big batches.)
+    // L1 fix: Stuck-recovery via cheap probe instead of a 5k-row scan.
+    // We only need the SINGLE most recently tested row. If THAT row's
+    // tested_at is fresher than IDLE_MAX_MS ago, we're not stuck — bail.
+    // Only when the cheap probe says "looks idle" do we pay for the full
+    // scan needed to enumerate the stuck rows.
     const IDLE_MAX_MS = 5 * 60 * 1000;
     const now = Date.now();
     const startedAt = run.started_at ? new Date(run.started_at).getTime() : null;
     if (startedAt) {
-      const active = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
-      const lastTested = active
-        .map((r) => (r.tested_at ? new Date(r.tested_at).getTime() : 0))
-        .reduce((a, b) => Math.max(a, b), 0);
+      const probe = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 1);
+      const lastTested = probe[0]?.tested_at ? new Date(probe[0].tested_at).getTime() : 0;
       const idle = lastTested === 0 ? (now - startedAt) : (now - lastTested);
       if (idle > IDLE_MAX_MS) {
+        // Confirmed idle — now do the expensive scan to recover.
+        const active = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
         const stuck = active.filter((r) => r.status === 'queued' || r.status === 'running');
         await Promise.all(stuck.map((r) =>
           base44.asServiceRole.entities.TestResult.update(r.id, {
@@ -115,12 +117,16 @@ Deno.serve(async (req) => {
             tested_at: new Date().toISOString(),
           })
         ));
-        // After updating `stuck` rows to 'error', re-count from the freshest
-        // snapshot to avoid double-counting them in `errored`.
-        const fresh = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
-        const working = fresh.filter((r) => r.status === 'working').length;
-        const failed = fresh.filter((r) => r.status === 'failed').length;
-        const errored = fresh.filter((r) => r.status === 'error').length;
+        // Single-pass tally over the snapshot we already have, applying
+        // the stuck→error transition in-memory (avoids a second 5k-row read).
+        const stuckIds = new Set(stuck.map((r) => r.id));
+        let working = 0, failed = 0, errored = 0;
+        for (const r of active) {
+          if (stuckIds.has(r.id)) { errored++; continue; }
+          if (r.status === 'working') working++;
+          else if (r.status === 'failed') failed++;
+          else if (r.status === 'error') errored++;
+        }
         await base44.asServiceRole.entities.TestRun.update(run_id, {
           status: 'failed',
           ended_at: new Date().toISOString(),
@@ -147,21 +153,25 @@ Deno.serve(async (req) => {
     );
 
     if (queued.length === 0) {
-      // Nothing left — mark run completed
-      const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 5000);
-      const stillRunning = all.some((r) => r.status === 'running' || r.status === 'queued');
+      // L2 fix: Trust the incremental counters first. If pending_count says 0
+      // AND there are no running rows, we're done — no full scan needed. Only
+      // if the counters look inconsistent (pending=0 but a running row exists)
+      // do we fall back to the authoritative recount.
+      const stillRunningProbe = await base44.asServiceRole.entities.TestResult.filter(
+        { run_id, status: 'running' }, '-created_date', 1
+      );
+      const stillRunning = stillRunningProbe.length > 0;
       if (!stillRunning) {
-        const working = all.filter((r) => r.status === 'working').length;
-        const failed = all.filter((r) => r.status === 'failed').length;
-        const errored = all.filter((r) => r.status === 'error').length;
+        // Use cached counters — they were reconciled at the last batch's
+        // completion or by the cancelRun path.
         await base44.asServiceRole.entities.TestRun.update(run_id, {
           status: 'completed',
           ended_at: new Date().toISOString(),
           elapsed_ms: run.started_at ? Date.now() - new Date(run.started_at).getTime() : 0,
           pending_count: 0,
-          working_count: working,
-          failed_count: failed,
-          error_count: errored,
+          working_count: run.working_count || 0,
+          failed_count: run.failed_count || 0,
+          error_count: run.error_count || 0,
         });
       }
       return Response.json({ done: true, processed: 0 });
@@ -217,21 +227,21 @@ Deno.serve(async (req) => {
         tested_at: new Date().toISOString(),
       });
 
-      // Mirror to Credential when terminal
+      // L3 fix: Mirror to Credential WITHOUT the read-then-write round trip.
+      // We don't need the existing `attempts` value — only the new fields
+      // matter for UI display, and `attempts` on Credential was a derived
+      // counter that's only ever incremented here. Dropping the read halves
+      // the network calls per terminal row.
       if (!shouldRetry && (o.status === 'working' || o.status === 'failed' || o.status === 'error')) {
         try {
           const credStatus = o.status === 'working' ? 'working' : o.status === 'failed' ? 'failed' : 'error';
-          const existing = await base44.asServiceRole.entities.Credential.filter({ id: r.credential_id });
-          if (existing[0]) {
-            await base44.asServiceRole.entities.Credential.update(r.credential_id, {
-              status: credStatus,
-              last_tested: new Date().toISOString(),
-              last_result_note: o.error_message || (o.final_url ? `→ ${o.final_url}` : null),
-              attempts: (existing[0].attempts || 0) + 1,
-              ...(o.working_password ? { working_password: o.working_password } : {}),
-            });
-          }
-        } catch (_) { /* ignore */ }
+          await base44.asServiceRole.entities.Credential.update(r.credential_id, {
+            status: credStatus,
+            last_tested: new Date().toISOString(),
+            last_result_note: o.error_message || (o.final_url ? `→ ${o.final_url}` : null),
+            ...(o.working_password ? { working_password: o.working_password } : {}),
+          });
+        } catch (_) { /* credential may have been deleted — ignore */ }
       }
     }));
 

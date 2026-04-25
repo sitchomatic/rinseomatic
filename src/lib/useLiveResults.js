@@ -23,26 +23,71 @@ export function useLiveResults(runId) {
     staleTime: isTerminal ? Infinity : 30_000,
   });
 
+  // L4 fix: Coalesced subscription updates with O(1) lookups.
+  // Previous version did O(n) findIndex on every event AND triggered a full
+  // setQueryData (and React re-render) per event. With high-throughput runs
+  // we'd see 50+ events/sec, each scanning a 10k-row array.
+  //
+  // New strategy:
+  //   1. Buffer incoming events in a ref keyed by id (latest-write-wins).
+  //   2. Flush via requestAnimationFrame — at most one cache write per frame.
+  //   3. Apply diffs against the previous list using a Map for O(1) merge.
   React.useEffect(() => {
     if (!runId) return;
-    const unsub = base44.entities.TestResult.subscribe((event) => {
-      const row = event?.data;
-      if (!row || row.run_id !== runId) return;
+
+    const pending = new Map();   // id → latest row (or {__delete: true})
+    let raf = 0;
+
+    const flush = () => {
+      raf = 0;
+      if (pending.size === 0) return;
+      const drain = pending;
+      // swap-out before mutating cache so any in-flight events still buffer
+      // into a fresh map.
+      const events = Array.from(drain.entries());
+      drain.clear();
 
       qc.setQueryData(key, (prev = []) => {
-        if (event.type === "delete") {
-          return prev.filter((r) => r.id !== event.id);
+        const map = new Map(prev.map((r) => [r.id, r]));
+        for (const [id, payload] of events) {
+          if (payload.__delete) map.delete(id);
+          else map.set(id, { ...(map.get(id) || {}), ...payload });
         }
-        // E11: id-keyed dedupe via index lookup. Same row arriving twice
-        // (network retry, leader handover) collapses to a single entry.
-        const idx = prev.findIndex((r) => r.id === row.id);
-        if (idx === -1) return [row, ...prev];
-        const next = prev.slice();
-        next[idx] = { ...next[idx], ...row };
+        // Preserve previous ordering (newest first), append new ids at top.
+        const next = [];
+        const seen = new Set();
+        for (const r of prev) {
+          const cur = map.get(r.id);
+          if (cur) { next.push(cur); seen.add(r.id); }
+        }
+        for (const [id, row] of map) {
+          if (!seen.has(id)) next.unshift(row);
+        }
         return next;
       });
+    };
+
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(flush);
+    };
+
+    const unsub = base44.entities.TestResult.subscribe((event) => {
+      if (event.type === "delete") {
+        pending.set(event.id, { __delete: true });
+        schedule();
+        return;
+      }
+      const row = event?.data;
+      if (!row || row.run_id !== runId) return;
+      pending.set(row.id, row);
+      schedule();
     });
-    return () => { try { unsub?.(); } catch {} };
+
+    return () => {
+      try { unsub?.(); } catch { /* ignore */ }
+      if (raf) cancelAnimationFrame(raf);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 

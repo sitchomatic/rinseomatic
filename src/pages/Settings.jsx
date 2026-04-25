@@ -243,11 +243,13 @@ export default function Settings() {
               <Button
                 size="sm"
                 onClick={() => saveMut.mutate(draft)}
-                disabled={!draft.key || !draft.label || !draft.login_url || saveMut.isPending}
+                disabled={!draft.key || !draft.label || (!draft.login_url && !draft.skip_primary) || saveMut.isPending}
                 title={
-                  !draft.key || !draft.label || !draft.login_url
-                    ? "Key, label, and login URL are required"
-                    : editing ? "Save changes to this site" : "Create this site"
+                  !draft.key || !draft.label
+                    ? "Key and label are required"
+                    : (!draft.login_url && !draft.skip_primary)
+                      ? "Login URL is required (or enable 'Skip primary' for aggregator sites)"
+                      : editing ? "Save changes to this site" : "Create this site"
                 }
               >
                 {saveMut.isPending ? "Saving…" : editing ? "Save site" : "Add site"}

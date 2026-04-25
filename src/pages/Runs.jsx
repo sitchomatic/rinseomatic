@@ -27,7 +27,13 @@ export default function Runs() {
     queryFn: () => base44.entities.Site.list("-created_date", 100),
     staleTime: 5 * 60_000,
   });
-  const siteLabel = (k) => sites.find((s) => s.key === k)?.label || k;
+  // L23 fix: O(1) lookup. Was O(n) `.find` per RunCard × 200 cards × every
+  // 3s poll = 60k iterations/min while a run is active. Same pattern as L14.
+  const siteByKey = React.useMemo(
+    () => Object.fromEntries((sites || []).map((s) => [s.key, s])),
+    [sites]
+  );
+  const siteLabel = (k) => siteByKey[k]?.label || k;
 
   return (
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">

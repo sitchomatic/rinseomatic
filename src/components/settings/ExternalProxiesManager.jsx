@@ -6,11 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Network, Pencil, X } from "lucide-react";
+import { Plus, Trash2, Network, Pencil, X, Activity, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 
 const BLANK = { label: "", host: "", port: 8080, protocol: "http", username: "", password: "", region: "", enabled: true };
+
+const HEALTH_STYLES = {
+  healthy: { dot: "bg-emerald-400", text: "text-emerald-300", label: "Healthy" },
+  degraded: { dot: "bg-amber-400", text: "text-amber-300", label: "Degraded" },
+  down: { dot: "bg-rose-400", text: "text-rose-300", label: "Down" },
+  untested: { dot: "bg-muted-foreground", text: "text-muted-foreground", label: "Untested" },
+};
 
 export default function ExternalProxiesManager({ proxies = [] }) {
   const qc = useQueryClient();
@@ -26,6 +34,18 @@ export default function ExternalProxiesManager({ proxies = [] }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["proxies"] }); toast.success("Proxy deleted"); },
   });
 
+  // Trigger an on-demand ping of all enabled proxies. The same backend
+  // function is also wired to a daily scheduled automation.
+  const pingMut = useMutation({
+    mutationFn: () => base44.functions.invoke("pingProxies", {}),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["proxies"] });
+      const data = res?.data || res;
+      toast.success(`Pinged ${data?.checked ?? 0} prox${(data?.checked ?? 0) === 1 ? "y" : "ies"}`);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || e.message),
+  });
+
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <div className="flex items-start gap-2">
@@ -36,9 +56,22 @@ export default function ExternalProxiesManager({ proxies = [] }) {
             Your own HTTP / HTTPS / SOCKS5 proxies. Used only when <span className="font-mono text-foreground">Proxy mode = External</span> (set above or per run).
           </div>
         </div>
-        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          {proxies.length} saved
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm" variant="outline" className="gap-1.5 h-7"
+            onClick={() => pingMut.mutate()}
+            disabled={pingMut.isPending || proxies.filter((p) => p.enabled !== false).length === 0}
+            title="Test reachability and latency for every enabled proxy"
+          >
+            {pingMut.isPending
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <Activity className="h-3 w-3" />}
+            Ping all
+          </Button>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            {proxies.length} saved
+          </span>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -47,7 +80,9 @@ export default function ExternalProxiesManager({ proxies = [] }) {
             No external proxies yet. Add one below to make the "External" proxy mode selectable.
           </div>
         )}
-        {proxies.map((p) => (
+        {proxies.map((p) => {
+          const health = HEALTH_STYLES[p.status] || HEALTH_STYLES.untested;
+          return (
           <div key={p.id}
             className={cn(
               "flex items-center gap-3 rounded-md border bg-secondary/20 px-3 py-2",
@@ -56,9 +91,18 @@ export default function ExternalProxiesManager({ proxies = [] }) {
           >
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate flex items-center gap-2">
+                <span
+                  className={cn("h-1.5 w-1.5 rounded-full shrink-0", health.dot)}
+                  title={`${health.label}${p.last_check ? ` · checked ${formatDistanceToNow(new Date(p.last_check), { addSuffix: true })}` : ""}`}
+                />
                 {p.label || `${p.host}:${p.port}`}
                 {p.enabled === false && (
                   <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 border border-amber-500/30 bg-amber-500/10 rounded px-1.5 py-0.5">disabled</span>
+                )}
+                {p.status && p.status !== "untested" && (
+                  <span className={cn("text-[10px] font-mono", health.text)}>
+                    {health.label}{p.latency_ms != null ? ` · ${p.latency_ms}ms` : ""}
+                  </span>
                 )}
               </div>
               <div className="text-[11px] font-mono text-muted-foreground truncate">
@@ -73,7 +117,8 @@ export default function ExternalProxiesManager({ proxies = [] }) {
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="rounded-md border border-border bg-background/40 p-3 space-y-3">

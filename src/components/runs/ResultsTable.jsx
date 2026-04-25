@@ -2,6 +2,29 @@ import React from "react";
 import StatusPill from "@/components/shared/StatusPill";
 import { formatMs } from "@/lib/sites";
 
+// Pull the "[Class] " tag out of error messages saved by the worker (D1).
+// Returns { label, message } where label may be null.
+function splitErrorTag(msg) {
+  if (!msg) return { label: null, message: null };
+  const m = msg.match(/^\[([^\]]+)\]\s*(.*)$/);
+  if (m) return { label: m[1], message: m[2] };
+  return { label: null, message: msg };
+}
+
+const ERROR_TONE = {
+  "Selector missing": "text-amber-300 border-amber-500/30 bg-amber-500/10",
+  "No login URL":     "text-amber-300 border-amber-500/30 bg-amber-500/10",
+  "Login URL 404":    "text-amber-300 border-amber-500/30 bg-amber-500/10",
+  "Credential gone":  "text-amber-300 border-amber-500/30 bg-amber-500/10",
+  "Captcha":          "text-rose-300 border-rose-500/30 bg-rose-500/10",
+  "IP blocked":       "text-rose-300 border-rose-500/30 bg-rose-500/10",
+  "Proxy error":      "text-rose-300 border-rose-500/30 bg-rose-500/10",
+  "Rate limited":     "text-sky-300 border-sky-500/30 bg-sky-500/10",
+  "Timeout":          "text-sky-300 border-sky-500/30 bg-sky-500/10",
+  "Network":          "text-sky-300 border-sky-500/30 bg-sky-500/10",
+  "Browserless 5xx":  "text-sky-300 border-sky-500/30 bg-sky-500/10",
+};
+
 export default function ResultsTable({ results }) {
   if (!results || results.length === 0) {
     return (
@@ -20,17 +43,28 @@ export default function ResultsTable({ results }) {
         <div>Elapsed</div>
       </div>
       <div className="divide-y divide-border/60 max-h-[540px] overflow-y-auto thin-scroll">
-        {results.map((r) => (
-          <div key={r.id} className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono">
-            <div className="truncate">{r.username}</div>
-            <div><StatusPill status={r.status} /></div>
-            <div className="text-muted-foreground">{r.attempts || 0}</div>
-            <div className="truncate text-muted-foreground">
-              {r.error_message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
+        {results.map((r) => {
+          const { label, message } = splitErrorTag(r.error_message);
+          const tone = label && ERROR_TONE[label];
+          return (
+            <div key={r.id} className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono">
+              <div className="truncate">{r.username}</div>
+              <div><StatusPill status={r.status} /></div>
+              <div className="text-muted-foreground">{r.attempts || 0}</div>
+              <div className="truncate text-muted-foreground flex items-center gap-2 min-w-0">
+                {label && (
+                  <span className={`shrink-0 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${tone || "text-muted-foreground border-border bg-secondary/40"}`}>
+                    {label}
+                  </span>
+                )}
+                <span className="truncate">
+                  {message || r.final_url || (r.success_marker_found ? "success marker ✓" : "—")}
+                </span>
+              </div>
+              <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
             </div>
-            <div className="text-muted-foreground">{formatMs(r.elapsed_ms)}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

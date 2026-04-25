@@ -1,0 +1,86 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// Pings each enabled external Proxy through Browserless to measure
+// reachability + latency. Updates Proxy.status / latency_ms / last_check.
+// Designed to be called either manually (from the Settings UI) or on a
+// daily schedule.
+
+async function pingOne(token, region, proxy) {
+  const url = `https://${region}.browserless.io/function?` + new URLSearchParams({ token });
+  const scheme = proxy.protocol || 'http';
+  const auth = proxy.username
+    ? `${encodeURIComponent(proxy.username)}${proxy.password ? `:${encodeURIComponent(proxy.password)}` : ''}@`
+    : '';
+  const externalProxyServer = `${scheme}://${auth}${proxy.host}:${proxy.port}`;
+
+  const code = `
+    export default async ({ page }) => {
+      const started = Date.now();
+      try {
+        const res = await page.goto('https://api.ipify.org?format=json', { waitUntil: 'domcontentloaded', timeout: 15000 });
+        const ok = res && res.ok();
+        const elapsed = Date.now() - started;
+        return { data: { ok, elapsed }, type: 'application/json' };
+      } catch (e) {
+        return { data: { ok: false, error: e.message, elapsed: Date.now() - started }, type: 'application/json' };
+      }
+    };
+  `;
+
+  const started = Date.now();
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, context: { externalProxyServer } }),
+    });
+    const elapsed = Date.now() - started;
+    if (!res.ok) return { ok: false, latency: elapsed, error: `Browserless ${res.status}` };
+    const json = await res.json();
+    const data = json?.data || json;
+    return { ok: !!data.ok, latency: data.elapsed ?? elapsed, error: data.error };
+  } catch (e) {
+    return { ok: false, latency: Date.now() - started, error: e.message };
+  }
+}
+
+function classify(ok, latency) {
+  if (!ok) return 'down';
+  if (latency > 1500) return 'degraded';
+  return 'healthy';
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me().catch(() => null);
+    // Allow scheduled invocation (no user) and authenticated UI invocation
+    if (req.headers.get('x-base44-trigger') !== 'scheduled' && !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const token = Deno.env.get('BROWSERLESS_TOKEN');
+    if (!token) return Response.json({ error: 'BROWSERLESS_TOKEN not set' }, { status: 500 });
+
+    const settings = (await base44.asServiceRole.entities.AppSettings.list('-created_date', 1))[0] || {};
+    const region = settings.browserless_region || 'production-sfo';
+
+    const proxies = await base44.asServiceRole.entities.Proxy.list('-created_date', 200);
+    const targets = proxies.filter((p) => p.enabled !== false && p.host && p.port);
+
+    const results = await Promise.all(targets.map(async (p) => {
+      const r = await pingOne(token, region, p);
+      const status = classify(r.ok, r.latency);
+      await base44.asServiceRole.entities.Proxy.update(p.id, {
+        status,
+        latency_ms: r.latency,
+        last_check: new Date().toISOString(),
+      });
+      return { id: p.id, label: p.label || `${p.host}:${p.port}`, status, latency_ms: r.latency, error: r.error };
+    }));
+
+    return Response.json({ checked: results.length, results });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2, Download } from "lucide-react";
+import { ArrowLeft, Square, CheckCircle2, XCircle, AlertTriangle, Loader2, Download, Trash2, Clock } from "lucide-react";
 import { toCsv, downloadFile } from "@/lib/download";
 import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -11,9 +11,10 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatusPill from "@/components/shared/StatusPill";
 import SiteChip from "@/components/shared/SiteChip";
 import ResultsTable from "@/components/runs/ResultsTable";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { formatMs } from "@/lib/sites";
+import { runEta, formatEta } from "@/lib/eta";
 import { toast } from "sonner";
-import { useRunWorker } from "@/lib/useRunWorker";
 import { useLiveResults } from "@/lib/useLiveResults";
 
 export default function RunDetail() {
@@ -21,6 +22,7 @@ export default function RunDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = React.useState("all");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data: run, isLoading: runLoading, isError: runError } = useQuery({
     queryKey: ["test-run", id],
@@ -42,7 +44,9 @@ export default function RunDetail() {
   });
   const siteLabel = sites.find((s) => s.key === run?.site_key)?.label || run?.site_key;
 
-  useRunWorker(run);
+  // Note: client-side worker polling removed — the scheduled `runWorkerScheduled`
+  // automation drives progress on the server every 5 minutes. The 2s poll on
+  // `useQuery` above keeps the UI live while you watch.
 
   const cancelMut = useMutation({
     mutationFn: async () => {
@@ -72,6 +76,22 @@ export default function RunDetail() {
     },
   });
 
+  // Delete run + cascade the result rows. Terminal-only — for active runs
+  // the user cancels first.
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      const all = await base44.entities.TestResult.filter({ run_id: id }, "-created_date", 5000);
+      await Promise.all(all.map((r) => base44.entities.TestResult.delete(r.id)));
+      await base44.entities.TestRun.delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["test-runs"] });
+      toast.success("Run deleted");
+      navigate("/runs");
+    },
+    onError: (e) => toast.error(e?.message || "Couldn't delete run"),
+  });
+
   if (runLoading) {
     return (
       <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
@@ -97,6 +117,9 @@ export default function RunDetail() {
   }
 
   const pct = run.total_count ? Math.round(((run.total_count - (run.pending_count || 0)) / run.total_count) * 100) : 0;
+  const eta = runEta(run);
+  const etaLabel = eta ? formatEta(eta.remainingMs) : null;
+  const isTerminal = run.status === "completed" || run.status === "failed" || run.status === "cancelled";
 
   const filtered =
     tab === "all" ? results :
@@ -142,6 +165,15 @@ export default function RunDetail() {
                 <Square className="h-3.5 w-3.5" /> Cancel
               </Button>
             )}
+            {isTerminal && (
+              <Button
+                variant="outline" size="sm"
+                className="gap-2 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 border-rose-500/30"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
+            )}
           </>
         }
       />
@@ -151,7 +183,11 @@ export default function RunDetail() {
         <Tile label="Working" icon={CheckCircle2} accent="text-emerald-300" value={run.working_count || 0} />
         <Tile label="Failed" icon={XCircle} accent="text-rose-300" value={run.failed_count || 0} />
         <Tile label="Errored" icon={AlertTriangle} accent="text-amber-300" value={run.error_count || 0} />
-        <Tile label="Elapsed" value={formatMs(run.elapsed_ms)} sub={run.status} />
+        {etaLabel ? (
+          <Tile label="ETA" icon={Clock} accent="text-sky-300" value={`~${etaLabel}`} sub={`${formatMs(run.elapsed_ms)} elapsed`} />
+        ) : (
+          <Tile label="Elapsed" value={formatMs(run.elapsed_ms)} sub={run.status} />
+        )}
       </div>
 
       <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-6">
@@ -170,6 +206,16 @@ export default function RunDetail() {
           <ResultsTable results={filtered} />
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this run?"
+        description={`"${run.label || "Untitled run"}" and all ${run.total_count || 0} result rows will be permanently deleted. This cannot be undone.`}
+        confirmLabel="Delete run"
+        destructive
+        onConfirm={() => deleteMut.mutate()}
+      />
     </div>
   );
 }

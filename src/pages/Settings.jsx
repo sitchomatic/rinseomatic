@@ -9,7 +9,8 @@ import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import ProxySettingsPanel from "@/components/settings/ProxySettingsPanel";
 import ExternalProxiesManager from "@/components/settings/ExternalProxiesManager";
-import { Plus, Trash2, Sparkles, Pencil } from "lucide-react";
+import SiteSandbox from "@/components/settings/SiteSandbox";
+import { Plus, Trash2, Sparkles, Pencil, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export default function Settings() {
 
   const [draft, setDraft] = React.useState(BLANK);
   const [confirmDelete, setConfirmDelete] = React.useState(null);
+  const [sandboxSite, setSandboxSite] = React.useState(null);
 
   const saveMut = useMutation({
     mutationFn: async (d) => {
@@ -121,6 +123,12 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" className="gap-1.5"
+                    onClick={() => setSandboxSite(s)}
+                    disabled={!s.login_url}
+                    title={s.login_url ? "Run a one-off login attempt with sandbox credentials to verify the selectors work" : "This site has no login URL — selectors can't be tested directly"}>
+                    <FlaskConical className="h-3 w-3" /> Test
+                  </Button>
                   <Button variant="ghost" size="sm" className="gap-1.5"
                     onClick={() => setDraft(s)}
                     title="Load this site into the form on the right for editing">
@@ -255,6 +263,12 @@ export default function Settings() {
         confirmLabel="Delete site"
         destructive
         onConfirm={() => { if (confirmDelete) deleteMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
+      />
+
+      <SiteSandbox
+        open={!!sandboxSite}
+        onOpenChange={(v) => !v && setSandboxSite(null)}
+        site={sandboxSite}
       />
     </div>
   );

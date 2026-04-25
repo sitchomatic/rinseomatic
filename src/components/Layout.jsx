@@ -2,6 +2,7 @@ import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -33,10 +34,11 @@ export default function Layout() {
           <div className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center">
             <Shield className="h-4 w-4 text-primary" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold">Credential Tester</div>
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">browserless</div>
           </div>
+          <ThemeToggle />
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
@@ -62,7 +64,8 @@ export default function Layout() {
           <div className="h-7 w-7 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center">
             <Shield className="h-3.5 w-3.5 text-primary" />
           </div>
-          <div className="text-sm font-semibold">Credential Tester</div>
+          <div className="text-sm font-semibold flex-1">Credential Tester</div>
+          <ThemeToggle />
         </div>
         <nav className="flex items-center gap-1 px-2 pb-2 overflow-x-auto thin-scroll">
           {NAV.map(({ to, label, icon: Icon, end }) => (

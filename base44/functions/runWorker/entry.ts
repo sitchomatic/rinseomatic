@@ -4,6 +4,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // and updates the TestRun counters. Designed to be invoked repeatedly from the UI
 // (simple polling) so runs survive page refresh.
 
+// --- Smart error classification (mirrors lib/errorClass.js, kept inline so
+// each backend function can be deployed independently — no shared imports.)
+const ERR_PATTERNS = [
+  { kind: 'transient', re: /\b(429|too many requests|rate.?limit)\b/i, label: 'Rate limited' },
+  { kind: 'transient', re: /\b(timeout|timed.?out|etimedout|navigation: timeout)\b/i, label: 'Timeout' },
+  { kind: 'transient', re: /\b(econnreset|enetunreach|socket hang up|network error)\b/i, label: 'Network' },
+  { kind: 'transient', re: /\bbrowserless 5\d\d\b/i, label: 'Browserless 5xx' },
+  { kind: 'blocked', re: /\b(captcha|challenge|cloudflare)\b/i, label: 'Captcha' },
+  { kind: 'blocked', re: /\b(403|forbidden|access.?denied|blocked|ip.?block)\b/i, label: 'IP blocked' },
+  { kind: 'blocked', re: /\bproxy\s+(error|auth|denied|refused)\b/i, label: 'Proxy error' },
+  { kind: 'config', re: /username field not found/i, label: 'Selector missing' },
+  { kind: 'config', re: /no login_url/i, label: 'No login URL' },
+  { kind: 'config', re: /\b(404|not found)\b/i, label: 'Login URL 404' },
+  { kind: 'config', re: /credential deleted/i, label: 'Credential gone' },
+];
+function classifyError(message) {
+  if (!message) return { kind: 'unknown', label: 'Unknown' };
+  for (const p of ERR_PATTERNS) if (p.re.test(message)) return { kind: p.kind, label: p.label };
+  return { kind: 'unknown', label: 'Unknown' };
+}
+function shouldRetryError(message, attempts, maxRetries) {
+  const cls = classifyError(message);
+  if (cls.kind === 'config') return false;        // never retry — site/data is wrong
+  if (cls.kind === 'blocked') return attempts < 1; // one retry max
+  return attempts < maxRetries;                    // transient + unknown
+}
+
 async function testOne(base44, site, result, run) {
   const started = Date.now();
   try {
@@ -169,20 +196,30 @@ Deno.serve(async (req) => {
     // Execute in parallel
     const outcomes = await Promise.all(claimable.map((r) => testOne(base44, site, r, run)));
 
-    // Persist results + retry on error
+    // Persist results + smart retry. Errors are classified into transient /
+    // blocked / config / unknown buckets — config errors (e.g. selector missing)
+    // never retry; blocked errors (captcha, 403) get one retry max; everything
+    // else uses the run's retry budget.
     const maxRetries = run.max_retries ?? 1;
     await Promise.all(claimable.map(async (r, i) => {
       const o = outcomes[i];
       const attempts = (r.attempts || 0) + 1;
-      const shouldRetry = o.status === 'error' && attempts <= maxRetries;
+      const errClass = o.status === 'error' ? classifyError(o.error_message) : null;
+      const shouldRetry = o.status === 'error' && shouldRetryError(o.error_message, attempts, maxRetries);
       const finalStatus = shouldRetry ? 'queued' : o.status;
+
+      // Tag the error message with its class so the UI can render a friendly
+      // label without re-parsing. e.g. "[Selector missing] username field not found".
+      const taggedMessage = errClass && o.error_message
+        ? `[${errClass.label}] ${o.error_message}`
+        : (o.error_message || null);
 
       await base44.asServiceRole.entities.TestResult.update(r.id, {
         status: finalStatus,
         attempts,
         final_url: o.final_url || null,
         success_marker_found: !!o.success_marker_found,
-        error_message: o.error_message || null,
+        error_message: taggedMessage,
         elapsed_ms: o.elapsed_ms || 0,
         tested_at: new Date().toISOString(),
       });

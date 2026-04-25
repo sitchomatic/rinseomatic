@@ -54,8 +54,12 @@ export default function ResultsTable({ results }) {
         <div>Elapsed</div>
       </div>
       <div className="divide-y divide-border/60 max-h-[540px] overflow-y-auto thin-scroll">
-        {decorated.map(({ row: r, label, message, tone }) => (
-          <div key={r.id} className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono">
+        {decorated.map(({ row: r, label, message, tone }, i) => (
+          <div
+            key={r.id}
+            className="grid grid-cols-[minmax(0,2fr)_110px_100px_minmax(0,3fr)_80px] gap-3 px-4 py-2.5 items-center text-xs font-mono animate-row-in"
+            style={{ animationDelay: `${Math.min(i * 8, 200)}ms` }}
+          >
             <div className="truncate">{r.username}</div>
             <div><StatusPill status={r.status} /></div>
             <div className="text-muted-foreground">{r.attempts || 0}</div>

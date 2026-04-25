@@ -3,12 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { KeyRound, CheckCircle2, XCircle, Activity, Play } from "lucide-react";
+import { KeyRound, CheckCircle2, XCircle, Activity, Play, Download } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/dashboard/StatCard";
 import SiteBreakdown from "@/components/dashboard/SiteBreakdown";
 import RecentRuns from "@/components/dashboard/RecentRuns";
 import ActivitySummary from "@/components/dashboard/ActivitySummary";
+import { buildCredentialReport } from "@/lib/credentialReport";
+import { downloadFile } from "@/lib/download";
 
 export default function Dashboard() {
   const { data: credentials = [], isLoading: loadingCreds } = useQuery({
@@ -50,6 +54,14 @@ export default function Dashboard() {
     [runs]
   );
 
+  const downloadReport = () => {
+    if (!credentials.length) return toast.error("Vault is empty — nothing to export");
+    const csv = buildCredentialReport(credentials, sites);
+    const stamp = format(new Date(), "yyyyMMdd-HHmm");
+    downloadFile(`credential-report-${stamp}.csv`, csv);
+    toast.success(`Exported ${credentials.length} credentials`);
+  };
+
   return (
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
       <PageHeader
@@ -58,6 +70,9 @@ export default function Dashboard() {
         description="At-a-glance health of your credential vault and recent test activity."
         actions={
           <>
+            <Button variant="outline" size="sm" className="gap-2" onClick={downloadReport} disabled={!credentials.length}>
+              <Download className="h-3.5 w-3.5" /> Download report
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link to="/credentials">Vault</Link>
             </Button>

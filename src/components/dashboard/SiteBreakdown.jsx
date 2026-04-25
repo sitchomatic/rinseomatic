@@ -32,13 +32,17 @@ export default function SiteBreakdown({ sites, credentials }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden animate-slide-up">
       <div className="px-5 py-4 border-b border-border bg-secondary/40">
         <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">By site</div>
       </div>
       <div className="divide-y divide-border/60">
-        {rows.map((r) => (
-          <div key={r.site.key} className="px-5 py-5">
+        {rows.map((r, i) => (
+          <div
+            key={r.site.key}
+            className="px-5 py-5 animate-row-in"
+            style={{ animationDelay: `${Math.min(i * 50, 250)}ms` }}
+          >
             <div className="flex items-center justify-between gap-3 mb-3">
               <SiteChip siteKey={r.site.key} label={r.site.label} size="sm" />
               <div className="text-xs font-mono text-muted-foreground">
@@ -46,10 +50,10 @@ export default function SiteBreakdown({ sites, credentials }) {
               </div>
             </div>
             <div className="h-2 bg-secondary rounded-full overflow-hidden flex">
-              <Bar value={r.working} total={r.total} className="bg-emerald-400" />
-              <Bar value={r.failed} total={r.total} className="bg-rose-400" />
-              <Bar value={r.error} total={r.total} className="bg-amber-400" />
-              <Bar value={r.untested} total={r.total} className="bg-muted-foreground/40" />
+              <Bar value={r.working} total={r.total} className="bg-emerald-400 transition-all duration-500 ease-out" />
+              <Bar value={r.failed} total={r.total} className="bg-rose-400 transition-all duration-500 ease-out" />
+              <Bar value={r.error} total={r.total} className="bg-amber-400 transition-all duration-500 ease-out" />
+              <Bar value={r.untested} total={r.total} className="bg-muted-foreground/40 transition-all duration-500 ease-out" />
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[10px] font-mono text-muted-foreground">
               <Legend color="bg-emerald-400" label={`${r.working} ok`} />

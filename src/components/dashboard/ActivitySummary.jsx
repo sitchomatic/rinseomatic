@@ -48,7 +48,7 @@ export default function ActivitySummary({ credentials, runs }) {
     : 0;
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden mb-6">
+    <div className="rounded-xl border border-border bg-card overflow-hidden mb-6 animate-slide-up">
       <div className="px-5 py-4 border-b border-border bg-secondary/40 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="h-3.5 w-3.5 text-primary" />

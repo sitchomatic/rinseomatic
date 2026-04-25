@@ -6,12 +6,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // daily schedule.
 
 async function pingOne(token, region, proxy) {
-  const url = `https://${region}.browserless.io/function?` + new URLSearchParams({ token });
+  // D3 fix: route the request through the actual proxy by passing
+  // externalProxyServer as a Browserless query param (matches testCredential).
+  // Previously this was passed in `context` and silently ignored, so the ping
+  // was measuring Browserless→ipify on the default datacenter IP.
   const scheme = proxy.protocol || 'http';
   const auth = proxy.username
     ? `${encodeURIComponent(proxy.username)}${proxy.password ? `:${encodeURIComponent(proxy.password)}` : ''}@`
     : '';
   const externalProxyServer = `${scheme}://${auth}${proxy.host}:${proxy.port}`;
+
+  const params = new URLSearchParams({ token });
+  params.set('externalProxyServer', externalProxyServer);
+  const url = `https://${region}.browserless.io/function?${params.toString()}`;
 
   const code = `
     export default async ({ page }) => {
@@ -32,7 +39,7 @@ async function pingOne(token, region, proxy) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, context: { externalProxyServer } }),
+      body: JSON.stringify({ code }),
     });
     const elapsed = Date.now() - started;
     if (!res.ok) return { ok: false, latency: elapsed, error: `Browserless ${res.status}` };

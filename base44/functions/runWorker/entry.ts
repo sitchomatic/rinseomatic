@@ -94,13 +94,13 @@ Deno.serve(async (req) => {
       return Response.json({ done: true, status: run.status });
     }
 
-    // Stuck-run recovery: if a run has been active >10 min with no tested_at progress >5 min,
-    // mark it failed and flush queued/running results to 'error'.
-    const RUN_MAX_MS = 10 * 60 * 1000;
+    // Stuck-run recovery: if no result has progressed in IDLE_MAX_MS, mark as failed.
+    // (C1: removed RUN_MAX_MS hard cap — large runs legitimately take >10min.
+    // Idle-only signal is sufficient and avoids false fails on big batches.)
     const IDLE_MAX_MS = 5 * 60 * 1000;
     const now = Date.now();
     const startedAt = run.started_at ? new Date(run.started_at).getTime() : null;
-    if (startedAt && now - startedAt > RUN_MAX_MS) {
+    if (startedAt) {
       const active = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-tested_at', 5000);
       const lastTested = active
         .map((r) => (r.tested_at ? new Date(r.tested_at).getTime() : 0))
@@ -175,17 +175,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Re-read each row before claiming it. Another worker invocation may have
-    // already grabbed it (multi-tab leader handover, double-poll, etc.). If the
-    // row is no longer 'queued' we drop it from this batch — never double-test.
-    const claimChecks = await Promise.all(queued.map((r) =>
-      base44.asServiceRole.entities.TestResult.filter({ id: r.id })
-    ));
-    const claimable = queued.filter((r, i) => (claimChecks[i]?.[0]?.status === 'queued'));
-    if (claimable.length === 0) {
-      return Response.json({ done: false, processed: 0, skipped: queued.length });
-    }
-
+    // A1: Claim by transitioning queued → running in one pass. The cron is now
+    // the only writer (client-side leader removed in D9), so the prior double-
+    // read defensive check is dead code.
+    const claimable = queued;
     await Promise.all(claimable.map((r) =>
       base44.asServiceRole.entities.TestResult.update(r.id, {
         status: 'running',
@@ -242,25 +235,48 @@ Deno.serve(async (req) => {
       }
     }));
 
-    // Update run counters
-    const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 5000);
-    const pending = all.filter((r) => r.status === 'queued' || r.status === 'running').length;
-    const working = all.filter((r) => r.status === 'working').length;
-    const failed = all.filter((r) => r.status === 'failed').length;
-    const errored = all.filter((r) => r.status === 'error').length;
+    // A2: Incremental counter update. Compute deltas from THIS batch's outcomes
+    // instead of re-reading all results every tick. Only do a full recount on
+    // completion (pending hits 0) as a consistency check.
+    let dWorking = 0, dFailed = 0, dErrored = 0, dPending = 0;
+    for (let i = 0; i < claimable.length; i++) {
+      const o = outcomes[i];
+      const attempts = (claimable[i].attempts || 0) + 1;
+      const willRetry = o.status === 'error' && shouldRetryError(o.error_message, attempts, run.max_retries ?? 1);
+      if (willRetry) continue; // stays queued, no counter change (was running, going back to queued)
+      dPending -= 1; // leaving the queued/running pool
+      if (o.status === 'working') dWorking += 1;
+      else if (o.status === 'failed') dFailed += 1;
+      else dErrored += 1;
+    }
+    // Note: rows that go back to 'queued' (retry) were 'running' in our pool —
+    // we already counted them as pending before, so no adjustment needed.
 
-    const isDone = pending === 0;
-    await base44.asServiceRole.entities.TestRun.update(run_id, {
-      pending_count: pending,
-      working_count: working,
-      failed_count: failed,
-      error_count: errored,
-      ...(isDone ? {
+    const newPending = Math.max(0, (run.pending_count ?? 0) + dPending);
+    const isDone = newPending === 0;
+
+    let updatePayload = {
+      pending_count: newPending,
+      working_count: (run.working_count || 0) + dWorking,
+      failed_count: (run.failed_count || 0) + dFailed,
+      error_count: (run.error_count || 0) + dErrored,
+    };
+
+    if (isDone) {
+      // Reconcile from source of truth on completion — guards against drift.
+      const all = await base44.asServiceRole.entities.TestResult.filter({ run_id }, '-created_date', 5000);
+      updatePayload = {
+        pending_count: all.filter((r) => r.status === 'queued' || r.status === 'running').length,
+        working_count: all.filter((r) => r.status === 'working').length,
+        failed_count: all.filter((r) => r.status === 'failed').length,
+        error_count: all.filter((r) => r.status === 'error').length,
         status: 'completed',
         ended_at: new Date().toISOString(),
         elapsed_ms: run.started_at ? Date.now() - new Date(run.started_at).getTime() : 0,
-      } : {}),
-    });
+      };
+    }
+
+    await base44.asServiceRole.entities.TestRun.update(run_id, updatePayload);
 
     return Response.json({ done: isDone, processed: claimable.length });
   } catch (error) {

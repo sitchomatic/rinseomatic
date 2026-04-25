@@ -92,6 +92,19 @@ export default function RunDetail() {
     onError: (e) => toast.error(e?.message || "Couldn't delete run"),
   });
 
+  // B1: Single-pass aggregator — bucket results once instead of 5 inline filters.
+  // Must be declared before any early return to satisfy rules-of-hooks.
+  const buckets = React.useMemo(() => {
+    const b = { all: results, working: [], failed: [], error: [], queued: [] };
+    for (const r of results) {
+      if (r.status === "working") b.working.push(r);
+      else if (r.status === "failed") b.failed.push(r);
+      else if (r.status === "error") b.error.push(r);
+      else if (r.status === "queued" || r.status === "running") b.queued.push(r);
+    }
+    return b;
+  }, [results]);
+
   if (runLoading) {
     return (
       <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
@@ -121,10 +134,7 @@ export default function RunDetail() {
   const etaLabel = eta ? formatEta(eta.remainingMs) : null;
   const isTerminal = run.status === "completed" || run.status === "failed" || run.status === "cancelled";
 
-  const filtered =
-    tab === "all" ? results :
-    tab === "queued" ? results.filter((r) => r.status === "queued" || r.status === "running") :
-    results.filter((r) => r.status === tab);
+  const filtered = buckets[tab] || results;
 
   const exportCsv = () => {
     if (!results.length) return toast.error("No results to export");
@@ -196,11 +206,11 @@ export default function RunDetail() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-card border border-border mb-4">
-          <TabsTrigger value="all">All <span className="ml-2 text-muted-foreground font-mono">{results.length}</span></TabsTrigger>
-          <TabsTrigger value="working">Working <span className="ml-2 text-emerald-300 font-mono">{results.filter((r) => r.status === "working").length}</span></TabsTrigger>
-          <TabsTrigger value="failed">Failed <span className="ml-2 text-rose-300 font-mono">{results.filter((r) => r.status === "failed").length}</span></TabsTrigger>
-          <TabsTrigger value="error">Error <span className="ml-2 text-amber-300 font-mono">{results.filter((r) => r.status === "error").length}</span></TabsTrigger>
-          <TabsTrigger value="queued">Queued <span className="ml-2 text-muted-foreground font-mono">{results.filter((r) => r.status === "queued" || r.status === "running").length}</span></TabsTrigger>
+          <TabsTrigger value="all">All <span className="ml-2 text-muted-foreground font-mono">{buckets.all.length}</span></TabsTrigger>
+          <TabsTrigger value="working">Working <span className="ml-2 text-emerald-300 font-mono">{buckets.working.length}</span></TabsTrigger>
+          <TabsTrigger value="failed">Failed <span className="ml-2 text-rose-300 font-mono">{buckets.failed.length}</span></TabsTrigger>
+          <TabsTrigger value="error">Error <span className="ml-2 text-amber-300 font-mono">{buckets.error.length}</span></TabsTrigger>
+          <TabsTrigger value="queued">Queued <span className="ml-2 text-muted-foreground font-mono">{buckets.queued.length}</span></TabsTrigger>
         </TabsList>
         <TabsContent value={tab}>
           <ResultsTable results={filtered} />

@@ -19,7 +19,7 @@ async function logEvent(base44, f) {
   } catch (_e) {}
 }
 
-function buildScrapingBeeProbeUrl(apiKey, settings, override, externalProxy) {
+function buildScrapingBeeProbeUrl(apiKey, settings, override) {
   const mode = override?.proxy_mode ?? settings.proxy_mode ?? 'premium';
   const country = (override?.country_code || settings.country_code || 'au').toLowerCase();
 
@@ -36,18 +36,9 @@ function buildScrapingBeeProbeUrl(apiKey, settings, override, externalProxy) {
   } else if (mode === 'stealth') {
     params.set('stealth_proxy', 'true');
     if (country) params.set('country_code', country);
-  } else if (mode === 'external' && externalProxy) {
-    const { host, port, protocol, username, password } = externalProxy;
-    if (host && port) {
-      const scheme = protocol || 'http';
-      const auth = username
-        ? `${encodeURIComponent(username)}${password ? `:${encodeURIComponent(password)}` : ''}@`
-        : '';
-      params.set('own_proxy', `${scheme}://${auth}${host}:${port}`);
-    }
   }
   if (settings.user_agent) params.set('forward_headers', 'true');
-  // 'classic' / 'none' → no proxy params for the diagnostics probe.
+  // 'classic' / 'none' / 'external' → no proxy params for the diagnostics probe.
 
   return `${API_BASE}?${params.toString()}`;
 }
@@ -68,17 +59,8 @@ Deno.serve(async (req) => {
 
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
     const settings = settingsRows[0] || {};
-    const mode = override?.proxy_mode ?? settings.proxy_mode ?? 'premium';
-    let externalProxy = null;
-    if (mode === 'external') {
-      const externalId = override?.external_proxy_id || settings.external_proxy_id;
-      if (externalId) {
-        const proxyRows = await base44.asServiceRole.entities.Proxy.filter({ id: externalId });
-        externalProxy = proxyRows[0] || null;
-      }
-    }
 
-    const url = buildScrapingBeeProbeUrl(apiKey, settings, override, externalProxy);
+    const url = buildScrapingBeeProbeUrl(apiKey, settings, override);
     const started = Date.now();
     const headers = settings.user_agent ? { 'User-Agent': settings.user_agent } : undefined;
     const res = await fetch(url, { method: 'GET', headers });
@@ -114,7 +96,7 @@ Deno.serve(async (req) => {
       provider: 'scrapingbee',
       browserless_reachable: true, // backward-compat key for the existing UI panel
       provider_reachable: true,
-      proxy_mode: mode,
+      proxy_mode: override?.proxy_mode ?? settings.proxy_mode ?? 'premium',
       country_requested: (override?.country_code || settings.country_code || 'au').toLowerCase(),
       ip: info.ip || null,
       country: info.country || null,

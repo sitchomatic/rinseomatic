@@ -97,7 +97,7 @@ export default function Settings() {
       <div className="space-y-6 mb-8">
         <TerminalSettingsPanel />
         <ProxySettingsPanel proxies={proxies} />
-        <DiagnosticsPanel proxies={proxies} />
+        <DiagnosticsPanel />
         <MaintenancePanel />
         <ExternalProxiesManager proxies={proxies} />
         <ProxyPoolsManager proxies={proxies} />

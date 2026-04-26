@@ -8,17 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Activity, Loader2, CheckCircle2, XCircle, Globe, MapPin, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function DiagnosticsPanel({ proxies = [] }) {
+export default function DiagnosticsPanel() {
   const [result, setResult] = React.useState(null);
   const [proxyMode, setProxyMode] = React.useState("default");
   const [countryCode, setCountryCode] = React.useState("");
-  const [externalProxyId, setExternalProxyId] = React.useState("");
   const mut = useMutation({
     mutationFn: () => base44.functions.invoke("runDiagnostics", {
       override: proxyMode === "default" ? undefined : {
         proxy_mode: proxyMode,
         country_code: countryCode.trim() || undefined,
-        external_proxy_id: externalProxyId || undefined,
       },
     }),
     onSuccess: (res) => setResult(res?.data || res),
@@ -32,7 +30,7 @@ export default function DiagnosticsPanel({ proxies = [] }) {
         <div className="flex-1">
           <div className="text-sm font-medium">Network diagnostics</div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Fires a probe through ScrapingBee with current or overridden proxy settings, hits an IP-info endpoint, and reports what the target site would actually see.
+            Fires a probe through ScrapingBee with the current global proxy settings, hits an IP-info endpoint, and reports what the target site would actually see. Costs 1–25 credits depending on proxy tier.
           </div>
         </div>
         <Button size="sm" className="gap-1.5 h-7" onClick={() => mut.mutate()} disabled={mut.isPending}>
@@ -50,7 +48,6 @@ export default function DiagnosticsPanel({ proxies = [] }) {
               <SelectItem value="classic">Classic</SelectItem>
               <SelectItem value="premium">Premium</SelectItem>
               <SelectItem value="stealth">Stealth</SelectItem>
-              <SelectItem value="external">External</SelectItem>
               <SelectItem value="none">None</SelectItem>
             </SelectContent>
           </Select>
@@ -58,20 +55,6 @@ export default function DiagnosticsPanel({ proxies = [] }) {
         <Field label="Country" help="Premium / stealth only.">
           <Input value={countryCode} onChange={(e) => setCountryCode(e.target.value.toLowerCase())} placeholder="au" className="font-mono text-xs" />
         </Field>
-        {proxyMode === "external" && (
-          <div className="sm:col-span-2">
-            <Field label="External proxy" help="Used only for this diagnostics probe.">
-              <Select value={externalProxyId} onValueChange={setExternalProxyId}>
-                <SelectTrigger><SelectValue placeholder="Select proxy…" /></SelectTrigger>
-                <SelectContent>
-                  {proxies.filter((p) => p.enabled !== false && p.protocol !== "wireguard").map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.label || `${p.host}:${p.port}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-        )}
       </div>
 
       {result && (

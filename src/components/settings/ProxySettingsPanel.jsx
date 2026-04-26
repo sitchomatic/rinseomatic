@@ -65,6 +65,12 @@ export default function ProxySettingsPanel({ proxies = [] }) {
             Applied to every login attempt unless overridden per-run. ScrapingBee credit costs scale with proxy tier.
           </div>
         </div>
+        <Toggle
+          label="V8 Logic (Advanced)"
+          help="Use V8 baseline (Playwright spoofing, dual-site parallel logic). Falls back to legacy on error."
+          checked={draft.v8_logic_enabled !== false}
+          onChange={(v) => setDraft({ ...draft, v8_logic_enabled: v })}
+        />
         <Button size="sm" className="gap-1.5 h-7" onClick={() => saveMut.mutate(draft)} disabled={saveMut.isPending}>
           <Save className="h-3 w-3" /> {saveMut.isPending ? "Saving…" : "Save"}
         </Button>

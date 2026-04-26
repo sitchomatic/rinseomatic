@@ -7,6 +7,11 @@
       "default": "global",
       "description": "Always 'global' \u2014 there is only one settings record."
     },
+    "v8_logic_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, uses the V8 advanced logic (simultaneous dual-site testing + Playwright spoofing) as the primary execution path. Falls back to legacy on error."
+    },
     "provider": {
       "type": "string",
       "enum": [

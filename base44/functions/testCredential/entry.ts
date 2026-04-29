@@ -263,12 +263,21 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   const verdict = classify(site, json);
   // Compact verdict log — final URL, task statuses, screenshot flag. The full
   // HTML body is intentionally omitted (it's huge and contains the page DOM).
-  const tasks = (json.js_scenario_report?.tasks || []).map((t) => `${t.action}:${t.status}`).join(' ');
+  const tasks = (json.js_scenario_report?.tasks || []).map((t) => `${t.action}:${t.status}(${Math.round(t.time || t.duration || 0)}ms)`).join(' | ');
+  
   logEvent(base44, {
     level: verdict.status === 'working' ? 'success' : verdict.status === 'error' ? 'error' : 'warn',
     category: 'network', site: site_key, delta_ms: elapsed,
     message: `← ScrapingBee ${res.status} · ${verdict.status} · ${json.resolved_url || '(no url)'} · [${tasks}]${json.screenshot ? ' · shot' : ''}`,
   });
+  
+  if (verdict.status === 'error' || verdict.status === 'failed') {
+    logEvent(base44, {
+      level: 'debug',
+      category: 'network', site: site_key, delta_ms: elapsed,
+      message: `Detailed ScrapingBee JS Scenario Report:\n${JSON.stringify(json.js_scenario_report || {}, null, 2)}`
+    });
+  }
 
   return { ...verdict, elapsed, screenshot_b64: json.screenshot || null };
 }

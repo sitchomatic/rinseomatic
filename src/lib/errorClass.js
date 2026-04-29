@@ -39,7 +39,7 @@ export function classifyError(message) {
 export function shouldRetry(message, attempts, maxRetries) {
   const cls = classifyError(message);
   if (cls.kind === 'config') return false;          // never retry config errors
-  if (cls.kind === 'blocked') return attempts < 1;   // one retry only — likely persistent
+  if (cls.kind === 'blocked') return attempts <= 1;   // one retry only — likely persistent
   // transient + unknown → use the run's retry budget
-  return attempts < maxRetries;
+  return attempts <= maxRetries;
 }

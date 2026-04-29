@@ -43,8 +43,8 @@ function classifyError(message) {
 function shouldRetryError(message, attempts, maxRetries) {
   const cls = classifyError(message);
   if (cls.kind === 'config') return false;        // never retry — site/data is wrong
-  if (cls.kind === 'blocked') return attempts < 1; // one retry max
-  return attempts < maxRetries;                    // transient + unknown
+  if (cls.kind === 'blocked') return attempts <= 1; // one retry max
+  return attempts <= maxRetries;                    // transient + unknown
 }
 
 async function testOne(base44, site, result, run) {

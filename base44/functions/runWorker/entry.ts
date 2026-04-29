@@ -160,6 +160,7 @@ Deno.serve(async (req) => {
           failed_count: failed,
           error_count: errored,
         });
+        await base44.asServiceRole.entities.AuditLog.create({ target: 'Stagehand', name: 'runWorker', status: 'success', metadata: JSON.stringify({ run_id, recovered: true, stuck: stuck.length }), timestamp: new Date().toISOString() }).catch(()=>{});
         return Response.json({ done: true, recovered: true, stuck: stuck.length });
       }
     }
@@ -199,6 +200,7 @@ Deno.serve(async (req) => {
           error_count: run.error_count || 0,
         });
       }
+      await base44.asServiceRole.entities.AuditLog.create({ target: 'Stagehand', name: 'runWorker', status: 'success', metadata: JSON.stringify({ run_id, processed: 0, isDone: true }), timestamp: new Date().toISOString() }).catch(()=>{});
       return Response.json({ done: true, processed: 0 });
     }
 

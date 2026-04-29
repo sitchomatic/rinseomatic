@@ -24,18 +24,18 @@ const NAV = [
 ];
 
 const TITLES = {
-  "/": "Dashboard · Credential Tester",
-  "/credentials": "Credentials · Credential Tester",
-  "/runs": "Test runs · Credential Tester",
-  "/audit": "Audit log · Credential Tester",
-  "/settings": "Settings · Credential Tester",
+  "/": "Dashboard · Aussie Dual-Casino Tester",
+  "/credentials": "Credentials · Aussie Dual-Casino Tester",
+  "/runs": "Test runs · Aussie Dual-Casino Tester",
+  "/audit": "Audit log · Aussie Dual-Casino Tester",
+  "/settings": "Settings · Aussie Dual-Casino Tester",
 };
 
 export default function Layout() {
   const { pathname } = useLocation();
 
   React.useEffect(() => {
-    const base = TITLES[pathname] || (pathname.startsWith("/runs/") ? "Run detail · Credential Tester" : "Credential Tester");
+    const base = TITLES[pathname] || (pathname.startsWith("/runs/") ? "Run detail · Aussie Dual-Casino Tester" : "Aussie Dual-Casino Tester");
     document.title = base;
   }, [pathname]);
 
@@ -48,8 +48,8 @@ export default function Layout() {
             <Shield className="h-4 w-4 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold">Credential Tester</div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">scrapingbee</div>
+            <div className="text-sm font-semibold">Aussie Casino Tester</div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Joe Fortune & Ignition</div>
           </div>
           <ThemeToggle />
         </div>
@@ -77,7 +77,7 @@ export default function Layout() {
           <div className="h-7 w-7 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center">
             <Shield className="h-3.5 w-3.5 text-primary" />
           </div>
-          <div className="text-sm font-semibold flex-1">Credential Tester</div>
+          <div className="text-sm font-semibold flex-1">Aussie Casino Tester</div>
           <ThemeToggle />
         </div>
         <nav className="flex items-center gap-1 px-2 pb-2 overflow-x-auto thin-scroll">

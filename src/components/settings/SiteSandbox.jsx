@@ -66,7 +66,7 @@ export default function SiteSandbox({ open, onOpenChange, site }) {
           <p className="text-xs text-muted-foreground leading-relaxed">
             Submits a real login attempt with the values below. The point isn't to
             log in — it's to confirm that the runner can find the username, password,
-            and submit selectors. A "failed" result with no error means the
+            and submit selectors. A "failed" result means the
             selectors are correct; the credentials are simply wrong.
           </p>
 
@@ -94,7 +94,7 @@ export default function SiteSandbox({ open, onOpenChange, site }) {
               {result.final_url && (
                 <div className="text-[11px] font-mono text-muted-foreground break-all">→ {result.final_url}</div>
               )}
-              {status === "failed" && !result.error_message && (
+              {status === "failed" && (
                 <div className="text-[11px] text-muted-foreground">
                   Selectors found and form submitted. Login was rejected (expected for sandbox creds).
                 </div>

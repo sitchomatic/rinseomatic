@@ -464,7 +464,7 @@ Deno.serve(async (req) => {
         for (const s of testSites) statusMap[s.key] = { site_key: s.key, elapsed_ms: 0 };
         
         let earlyStop = false;
-        const v8Settings = { ...settings, capture_screenshots: true };
+        const v8Settings = { ...settings };
         const v8Proxy = { ...proxy, mode: 'stealth' }; // V8 enforces stealth proxy
 
         for (const pw of list) {

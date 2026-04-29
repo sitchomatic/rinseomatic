@@ -21,6 +21,7 @@ const PATTERNS = [
 
   // config — these will not be retried
   { kind: 'config', re: /username field not found/i, label: 'Selector missing' },
+  { kind: 'config', re: /fill failed/i, label: 'Fill failed' },
   { kind: 'config', re: /no login_url/i, label: 'No login URL' },
   { kind: 'config', re: /\b(404|not found)\b/i, label: 'Login URL 404' },
   { kind: 'config', re: /credential deleted/i, label: 'Credential gone' },

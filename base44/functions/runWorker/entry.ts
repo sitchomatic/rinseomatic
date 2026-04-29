@@ -30,6 +30,7 @@ const ERR_PATTERNS = [
   { kind: 'blocked', re: /\b(403|forbidden|access.?denied|blocked|ip.?block)\b/i, label: 'IP blocked' },
   { kind: 'blocked', re: /\bproxy\s+(error|auth|denied|refused)\b/i, label: 'Proxy error' },
   { kind: 'config', re: /username field not found/i, label: 'Selector missing' },
+  { kind: 'config', re: /fill failed/i, label: 'Fill failed' },
   { kind: 'config', re: /no login_url/i, label: 'No login URL' },
   { kind: 'config', re: /\b(404|not found)\b/i, label: 'Login URL 404' },
   { kind: 'config', re: /credential deleted/i, label: 'Credential gone' },

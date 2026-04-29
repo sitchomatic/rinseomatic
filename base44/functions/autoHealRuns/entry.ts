@@ -60,11 +60,10 @@ async function healOneRun(base44, run, settings) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    // Allow scheduled (system) calls and admins. The platform passes a
-    // service-role context for cron triggers — base44.auth.me() returns null
-    // in that case, which we treat as authorised.
-    if (user && user.role !== 'admin') {
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
+    // Allow scheduled invocation (no user) and authenticated UI invocation.
+    if (req.headers.get('x-base44-trigger') !== 'scheduled' && (!user || user.role !== 'admin')) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 

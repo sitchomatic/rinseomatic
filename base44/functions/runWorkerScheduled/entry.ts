@@ -21,9 +21,9 @@ Deno.serve(async (req) => {
     // Allow either a logged-in admin (manual kick from UI) or service-role
     // invocation (the scheduled automation, which has no end-user token).
     let user = null;
-    try { user = await base44.auth.me(); } catch (_) { /* unauth = scheduled */ }
-    if (user && user.role !== 'admin') {
-      return Response.json({ error: 'Admin only' }, { status: 403 });
+    try { user = await base44.auth.me(); } catch (_) {}
+    if (req.headers.get('x-base44-trigger') !== 'scheduled' && (!user || user.role !== 'admin')) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);

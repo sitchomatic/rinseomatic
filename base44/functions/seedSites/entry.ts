@@ -56,10 +56,10 @@ const DEFAULT_SITES = [
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'admin') {
-      return Response.json({ error: 'Admin only' }, { status: 403 });
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // L16 fix: only fetch the keys that matter (parallel filters), not the

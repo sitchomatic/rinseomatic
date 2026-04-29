@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const active = [...queued, ...running];
 
     if (active.length === 0) {
-      return Response.json({ done: true, ran: 0 });
+      return Response.json({ done: true, total: 0, processed: 0, deferred: 0 });
     }
 
     // C3: Fire all up to the ceiling in parallel — no wave structure.

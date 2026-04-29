@@ -93,8 +93,8 @@ async function testOne(base44, site, result, run) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
 
     const { run_id } = await req.json();
     if (!run_id) return Response.json({ error: 'Missing run_id' }, { status: 400 });

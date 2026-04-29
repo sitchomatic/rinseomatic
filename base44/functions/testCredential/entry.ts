@@ -151,16 +151,17 @@ function classify(site, sbJson) {
   const resolvedUrl = sbJson.resolved_url || sbJson.initial_status_code_url || '';
   const body = sbJson.body || '';
   const report = sbJson.js_scenario_report || {};
-  const tasks = Array.isArray(report.tasks) ? report.tasks : [];
+  const tasksArray = Array.isArray(report.tasks) ? report.tasks : [];
+  const tasksString = tasksArray.map((t) => `${t.action}:${t.status}(${Math.round(t.time || t.duration || 0)}ms)`).join(' | ');
 
   // 1. If a documented instruction failed BEFORE submit (wait_for / fill),
   //    selectors are wrong → config error.
-  const preSubmitFail = tasks.find(
+  const preSubmitFail = tasksArray.find(
     (t) => t.status && t.status !== 'success' && (t.action === 'wait_for' || t.action === 'fill')
   );
   if (preSubmitFail) {
     const which = preSubmitFail.action === 'wait_for' ? 'username field not found' : 'fill failed';
-    return { status: 'error', error: `${which}: ${preSubmitFail.task || ''}`.trim() };
+    return { status: 'error', error: `${which}: ${preSubmitFail.task || ''}`.trim(), tasks_string: tasksString };
   }
 
   // 2. URL-based detection (matches the existing Browserless logic).
@@ -201,12 +202,12 @@ function classify(site, sbJson) {
   const disabled = body.toLowerCase().includes('has been disabled') || body.toLowerCase().includes('temporarily disabled') || body.toLowerCase().includes('disabled');
 
   if (markerFound || successUrl) {
-    return { status: 'working', final_url: resolvedUrl, marker: markerFound, disabled };
+    return { status: 'working', final_url: resolvedUrl, marker: markerFound, disabled, tasks_string: tasksString };
   }
   if (site.lenient_success && !stayedLogin && !blocked) {
-    return { status: 'working', final_url: resolvedUrl, marker: false, disabled };
+    return { status: 'working', final_url: resolvedUrl, marker: false, disabled, tasks_string: tasksString };
   }
-  return { status: 'failed', final_url: resolvedUrl, marker: false, disabled };
+  return { status: 'failed', final_url: resolvedUrl, marker: false, disabled, tasks_string: tasksString };
 }
 
 // Strip the api_key from a ScrapingBee URL so it's safe to log.
@@ -263,12 +264,12 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   const verdict = classify(site, json);
   // Compact verdict log — final URL, task statuses, screenshot flag. The full
   // HTML body is intentionally omitted (it's huge and contains the page DOM).
-  const tasks = (json.js_scenario_report?.tasks || []).map((t) => `${t.action}:${t.status}(${Math.round(t.time || t.duration || 0)}ms)`).join(' | ');
+  const tasksString = verdict.tasks_string || '';
   
   logEvent(base44, {
     level: verdict.status === 'working' ? 'success' : verdict.status === 'error' ? 'error' : 'warn',
     category: 'network', site: site_key, delta_ms: elapsed,
-    message: `← ScrapingBee ${res.status} · ${verdict.status} · ${json.resolved_url || '(no url)'} · [${tasks}]${json.screenshot ? ' · shot' : ''}`,
+    message: `← ScrapingBee ${res.status} · ${verdict.status} · ${json.resolved_url || '(no url)'} · [${tasksString}]${json.screenshot ? ' · shot' : ''}`,
   });
   
   if (verdict.status === 'error' || verdict.status === 'failed') {
@@ -279,7 +280,7 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
     });
   }
 
-  return { ...verdict, elapsed, screenshot_b64: json.screenshot || null };
+  return { ...verdict, elapsed, screenshot_b64: json.screenshot || null, tasks_string: tasksString };
 }
 
 // Upload a base64 screenshot returned by ScrapingBee (json.screenshot) and
@@ -330,7 +331,10 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
       };
     }
     if (r.status === 'error') {
-      lastError = r.error;
+      lastError = r.error || 'unknown error';
+      if (r.tasks_string && !lastError.includes('Steps:')) {
+        lastError += `\nSteps: ${r.tasks_string}`;
+      }
       if (strategy === 'single') break;
       continue;
     }
@@ -346,6 +350,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
       success_marker_found: false,
       elapsed_ms: totalElapsed,
       screenshot_b64: lastScreenshot,
+      error_message: lastFailed.tasks_string ? `Failed (no success marker)\nSteps: ${lastFailed.tasks_string}` : 'Failed (no success marker)',
     };
   }
   return {
@@ -373,6 +378,7 @@ function combine(perSite) {
     status: 'failed',
     final_url: anyFailed.final_url,
     success_marker_found: false,
+    error_message: anyFailed.error_message || undefined,
     elapsed_ms: perSite.reduce((a, b) => a + (b.elapsed_ms || 0), 0),
     per_site: perSite,
   };
@@ -497,10 +503,14 @@ Deno.serve(async (req) => {
             } else if (r.status === 'error') {
               statusMap[sk].status = 'error';
               statusMap[sk].error_message = r.error || 'unknown error';
+              if (r.tasks_string && !statusMap[sk].error_message.includes('Steps:')) {
+                statusMap[sk].error_message += `\nSteps: ${r.tasks_string}`;
+              }
             } else {
               statusMap[sk].status = 'failed';
               statusMap[sk].final_url = r.final_url;
               statusMap[sk].success_marker_found = false;
+              statusMap[sk].error_message = r.tasks_string ? `Failed (no success marker)\nSteps: ${r.tasks_string}` : 'Failed (no success marker)';
             }
           }
 
@@ -543,7 +553,7 @@ Deno.serve(async (req) => {
     // first non-null b64 across all per-site results — there's only ever one
     // ScrapingBee request per site so at most one screenshot per site anyway.
     const screenshotB64 = finalResults.find((r) => r.screenshot_b64)?.screenshot_b64 || null;
-    const screenshotUrl = settings.capture_screenshots
+    const screenshotUrl = screenshotB64
       ? await uploadScreenshot(base44, screenshotB64, site_key, username)
       : null;
 

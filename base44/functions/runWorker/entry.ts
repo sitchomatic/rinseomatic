@@ -98,7 +98,9 @@ Deno.serve(async (req) => {
     try { user = await base44.auth.me(); } catch (_) {}
 
     const body = await req.json().catch(() => ({}));
-    if (body._secret !== Deno.env.get('SCRAPINGBEE_API_KEY') && (!user || user.role !== 'admin')) {
+    const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+    if (!apiKey) return Response.json({ error: 'API key not configured' }, { status: 500 });
+    if (body._secret !== apiKey && (!user || user.role !== 'admin')) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

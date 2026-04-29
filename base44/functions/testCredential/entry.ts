@@ -398,9 +398,13 @@ Deno.serve(async (req) => {
     try { user = await base44.auth.me(); } catch (_) {}
 
     const body = await req.json().catch(() => ({}));
-    if (body._secret !== Deno.env.get('SCRAPINGBEE_API_KEY') && (!user || user.role !== 'admin')) {
+    const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+    if (!apiKey) return Response.json({ error: 'SCRAPINGBEE_API_KEY not set' }, { status: 500 });
+    
+    if (body._secret !== apiKey && (!user || user.role !== 'admin')) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    
     const {
       username, password, extra_passwords, site_key,
       target_site_keys, custom_url,
@@ -410,9 +414,6 @@ Deno.serve(async (req) => {
     if (!username || !password || !site_key) {
       return Response.json({ error: 'Missing username/password/site_key' }, { status: 400 });
     }
-
-    const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
-    if (!apiKey) return Response.json({ error: 'SCRAPINGBEE_API_KEY not set' }, { status: 500 });
 
     const settings = await loadSettings(base44);
     const strategy = runStrategy || settings.default_login_strategy || 'multi_password';

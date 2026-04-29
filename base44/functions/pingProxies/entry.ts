@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch(() => null);
     // Allow scheduled invocation (no user) and authenticated UI invocation.
-    if (req.headers.get('x-base44-trigger') !== 'scheduled' && !user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (req.headers.get('x-base44-trigger') !== 'scheduled' && (!user || user.role !== 'admin')) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);

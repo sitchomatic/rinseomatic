@@ -56,7 +56,7 @@ async function testOne(base44, site, result, run) {
       return { status: 'error', error_message: 'Credential deleted', elapsed_ms: 0 };
     }
 
-    const res = await base44.functions.invoke('testCredential', {
+    const res = await base44.asServiceRole.functions.invoke('testCredential', {
       username: credential.username,
       password: credential.password,
       extra_passwords: credential.extra_passwords || [],
@@ -69,6 +69,7 @@ async function testOne(base44, site, result, run) {
         country_code: run.country_code,
         external_proxy_id: run.external_proxy_id,
       },
+      _secret: Deno.env.get('SCRAPINGBEE_API_KEY')
     });
 
     const data = res?.data || res;
@@ -96,7 +97,12 @@ Deno.serve(async (req) => {
     let user = null;
     try { user = await base44.auth.me(); } catch (_) {}
 
-    const { run_id } = await req.json();
+    const body = await req.json();
+    if (body._secret !== Deno.env.get('SCRAPINGBEE_API_KEY') && (!user || user.role !== 'admin')) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { run_id } = body;
     if (!run_id) return Response.json({ error: 'Missing run_id' }, { status: 400 });
 
     const runs = await base44.asServiceRole.entities.TestRun.filter({ id: run_id });

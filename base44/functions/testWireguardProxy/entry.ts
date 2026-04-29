@@ -58,8 +58,11 @@ async function tcpProbe(host, port, timeoutMs = 4000) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { proxy_id } = await req.json();
     if (!proxy_id) return Response.json({ error: 'Missing proxy_id' }, { status: 400 });

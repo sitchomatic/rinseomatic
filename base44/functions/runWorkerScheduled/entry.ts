@@ -45,7 +45,10 @@ Deno.serve(async (req) => {
     // picked up on the next 5-minute tick.
     const slice = active.slice(0, maxParallelRuns);
     const results = await Promise.allSettled(slice.map((run) =>
-      base44.asServiceRole.functions.invoke('runWorker', { run_id: run.id })
+      base44.asServiceRole.functions.invoke('runWorker', { 
+        run_id: run.id,
+        _secret: Deno.env.get('SCRAPINGBEE_API_KEY')
+      })
     ));
     const processed = results.filter((r) => r.status === 'fulfilled').length;
     results.forEach((r, i) => {

@@ -30,7 +30,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { run_id } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { run_id } = body;
     if (!run_id) return Response.json({ error: 'Missing run_id' }, { status: 400 });
 
     // SDK throws on malformed ObjectIDs — treat that as "not found" rather

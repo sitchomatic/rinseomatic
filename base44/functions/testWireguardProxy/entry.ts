@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { proxy_id } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { proxy_id } = body;
     if (!proxy_id) return Response.json({ error: 'Missing proxy_id' }, { status: 400 });
 
     const rows = await base44.asServiceRole.entities.Proxy.filter({ id: proxy_id });

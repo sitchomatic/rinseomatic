@@ -81,7 +81,7 @@ export default function Credentials() {
       <PageHeader
         eyebrow="vault · global"
         title="Credentials"
-        description="Username + password records. Test any selection against any configured site."
+        description="Username + password records. Test any selection against Joe Fortune and Ignition."
         actions={
           <>
             <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImport(true)}>

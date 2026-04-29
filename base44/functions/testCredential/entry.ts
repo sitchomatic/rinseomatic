@@ -479,7 +479,7 @@ Deno.serve(async (req) => {
             const loginUrl = custom_url || s.login_url;
             if (!loginUrl) return { _site: s, site_key: s.key, status: 'error', error_message: 'No login_url' };
             
-            const r = await runOne(apiKey, v8Settings, v8Proxy, s, loginUrl, username, pw, base44, site_key);
+            const r = await runOne(apiKey, v8Settings, v8Proxy, s, loginUrl, username, pw, base44, s.key);
             return { _site: s, ...r };
           });
 

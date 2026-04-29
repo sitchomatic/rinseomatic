@@ -39,7 +39,7 @@ const DEFAULT_SITES = [
   },
   {
     key: 'double',
-    label: 'Double (Joe + Ignition)',
+    label: 'Aussie Dual (Joe + Ignition)',
     login_url: '',
     username_selector: "input[type='email'], input[name='username']",
     password_selector: "input[type='password']",

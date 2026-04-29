@@ -49,7 +49,8 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
 
   React.useEffect(() => {
     if (!siteKey && sites.length > 0) {
-      const first = sites.find((s) => s.enabled !== false) || sites[0];
+      const aussieDual = sites.find((s) => s.key === 'double' && s.enabled !== false);
+      const first = aussieDual || sites.find((s) => s.enabled !== false) || sites[0];
       if (first) setSiteKey(first.key);
     }
   }, [sites, siteKey]);

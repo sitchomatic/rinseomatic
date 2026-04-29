@@ -49,7 +49,7 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="01 · overview"
         title="Dashboard"
-        description="Vault size, run activity, and recent test outcomes at a glance."
+        description="Vault size, run activity, and recent Aussie casino outcomes at a glance."
         actions={
           <>
             <Button size="sm" variant="outline" className="gap-2" onClick={() => navigate("/credentials")}>

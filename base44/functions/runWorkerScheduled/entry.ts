@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
       if (r.status === 'rejected') console.error(`runWorker failed for ${slice[i].id}:`, r.reason?.message);
     });
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'runWorkerScheduled', status: 'success', metadata: JSON.stringify({ total: active.length, processed }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ done: true, total: active.length, processed, deferred: Math.max(0, active.length - slice.length) });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

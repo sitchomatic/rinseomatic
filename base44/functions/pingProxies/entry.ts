@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
       : { id: targets[i].id, label: targets[i].label || `${targets[i].host}:${targets[i].port}`, status: 'down', error: s.reason?.message }
     ));
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'pingProxies', status: 'success', metadata: JSON.stringify({ checked: results.length }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ checked: results.length, results });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

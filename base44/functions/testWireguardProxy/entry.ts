@@ -68,8 +68,11 @@ Deno.serve(async (req) => {
     const { proxy_id } = body;
     if (!proxy_id) return Response.json({ error: 'Missing proxy_id' }, { status: 400 });
 
-    const rows = await base44.asServiceRole.entities.Proxy.filter({ id: proxy_id });
-    const proxy = rows[0];
+    let proxy = null;
+    try {
+      const rows = await base44.asServiceRole.entities.Proxy.filter({ id: proxy_id });
+      proxy = rows[0];
+    } catch(e) {}
     if (!proxy) return Response.json({ error: 'Proxy not found' }, { status: 404 });
     if (proxy.protocol !== 'wireguard') {
       return Response.json({ error: 'Proxy is not a WireGuard entry' }, { status: 400 });
@@ -100,6 +103,7 @@ Deno.serve(async (req) => {
       last_check: new Date().toISOString(),
     });
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'testWireguardProxy', status: 'success', metadata: JSON.stringify({ proxy_id, status }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({
       ok: true,
       parsed: { host: parsed.host, port: parsed.port, address: parsed.address, public_key_preview: parsed.public_key.slice(0, 12) + '…' },

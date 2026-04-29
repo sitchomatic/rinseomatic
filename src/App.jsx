@@ -12,6 +12,7 @@ import Runs from '@/pages/Runs';
 import RunDetail from '@/pages/RunDetail';
 import Settings from '@/pages/Settings';
 import Audit from '@/pages/Audit.jsx';
+import Activity from '@/pages/Activity.jsx';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -38,6 +39,7 @@ const AuthenticatedApp = () => {
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/audit" element={<Audit />} />
+        <Route path="/activity" element={<Activity />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

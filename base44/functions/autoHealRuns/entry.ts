@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'autoHealRuns', status: 'success', metadata: JSON.stringify({ scanned: active.length, healed: summaries.length }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ ok: true, scanned: active.length, healed: summaries });
   } catch (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });

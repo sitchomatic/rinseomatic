@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
     if (toCreate.length > 0) {
       await base44.asServiceRole.entities.Site.bulkCreate(toCreate);
     }
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'seedSites', status: 'success', metadata: JSON.stringify({ created: toCreate.length }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ created: toCreate.length, existing: DEFAULT_SITES.length - toCreate.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

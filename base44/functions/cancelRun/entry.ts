@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
       message: `Run cancelled · ${run.label || run_id} · ${cancelled.length} in-flight rows aborted`,
     });
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'cancelRun', status: 'success', metadata: JSON.stringify({ run_id, cancelled: cancelled.length }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ ok: true, cancelled: cancelled.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

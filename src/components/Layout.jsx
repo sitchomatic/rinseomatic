@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio } from "lucide-react";
+import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import LiveTerminal from "@/components/terminal/LiveTerminal";
@@ -19,6 +19,7 @@ const NAV = [
   { to: "/credentials", label: "Credentials", icon: KeyRound },
   { to: "/runs", label: "Test runs", icon: Play },
   { to: "/audit", label: "Audit log", icon: Radio },
+  { to: "/activity", label: "Activity", icon: Activity },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

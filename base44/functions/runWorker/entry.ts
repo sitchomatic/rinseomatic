@@ -107,8 +107,11 @@ Deno.serve(async (req) => {
     const { run_id } = body;
     if (!run_id) return Response.json({ error: 'Missing run_id' }, { status: 400 });
 
-    const runs = await base44.asServiceRole.entities.TestRun.filter({ id: run_id });
-    const run = runs[0];
+    let run = null;
+    try {
+      const runs = await base44.asServiceRole.entities.TestRun.filter({ id: run_id });
+      run = runs[0];
+    } catch(e) {}
     if (!run) return Response.json({ error: 'Run not found' }, { status: 404 });
 
     if (run.status === 'cancelled' || run.status === 'completed' || run.status === 'failed') {
@@ -314,6 +317,7 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.TestRun.update(run_id, updatePayload);
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Stagehand', name: 'runWorker', status: 'success', metadata: JSON.stringify({ run_id, processed: claimable.length, isDone }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({ done: isDone, processed: claimable.length });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

@@ -94,6 +94,7 @@ Deno.serve(async (req) => {
       message: `Diagnostics probe · IP=${info.ip || '?'} country=${info.country || '?'} city=${info.city || '?'} org=${info.org || '?'}`,
     });
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'runDiagnostics', status: 'success', metadata: JSON.stringify({ ip: info.ip }), timestamp: new Date().toISOString() }).catch(()=>{});
     return Response.json({
       ok: true,
       provider: 'scrapingbee',

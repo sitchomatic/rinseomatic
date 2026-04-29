@@ -561,6 +561,8 @@ Deno.serve(async (req) => {
       ? await uploadScreenshot(base44, screenshotB64, site_key, username)
       : null;
 
+    await base44.asServiceRole.entities.AuditLog.create({ target: 'Stagehand', name: 'testCredential', status: 'success', metadata: JSON.stringify({ site_key, username }), timestamp: new Date().toISOString() }).catch(()=>{});
+    
     if (finalResults.length === 1) {
       const r = finalResults[0];
       return Response.json({

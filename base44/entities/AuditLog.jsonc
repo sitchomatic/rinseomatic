@@ -1,0 +1,37 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "System component (e.g., Cloud Function, Stagehand)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of the executed function or run"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "started",
+        "success",
+        "failed",
+        "error"
+      ],
+      "description": "Execution status"
+    },
+    "metadata": {
+      "type": "string",
+      "description": "JSON stringified metadata"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "target",
+    "name",
+    "status"
+  ]
+}

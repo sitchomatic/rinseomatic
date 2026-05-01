@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
     const settings = settingsRows[0] || {};
     const maxParallelRuns = Math.max(1, Math.min(50, Number(settings.worker_max_parallel_runs) || DEFAULT_MAX_PARALLEL_RUNS));
+    const apiKey = settings.scrapingbee_api_key || Deno.env.get('SCRAPINGBEE_API_KEY');
 
     const queued = await base44.asServiceRole.entities.TestRun.filter({ status: 'queued' }, '-created_date', 50);
     const running = await base44.asServiceRole.entities.TestRun.filter({ status: 'running' }, '-created_date', 50);
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
     const results = await Promise.allSettled(slice.map((run) =>
       base44.asServiceRole.functions.invoke('runWorker', { 
         run_id: run.id,
-        _secret: Deno.env.get('SCRAPINGBEE_API_KEY')
+        _secret: apiKey
       })
     ));
     const processed = results.filter((r) => r.status === 'fulfilled').length;

@@ -55,13 +55,13 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const override = body?.override || null;
 
-    const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
+    const settings = settingsRows[0] || {};
+
+    const apiKey = settings.scrapingbee_api_key || Deno.env.get('SCRAPINGBEE_API_KEY');
     if (!apiKey) {
       return Response.json({ error: 'SCRAPINGBEE_API_KEY not set' }, { status: 500 });
     }
-
-    const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
-    const settings = settingsRows[0] || {};
 
     const url = buildScrapingBeeProbeUrl(apiKey, settings, override);
     const started = Date.now();

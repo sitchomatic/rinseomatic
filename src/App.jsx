@@ -16,6 +16,7 @@ import UpdateApiKey from '@/pages/UpdateApiKey.jsx';
 import Audit from '@/pages/Audit.jsx';
 import Activity from '@/pages/Activity.jsx';
 import Recordings from '@/pages/Recordings.jsx';
+import BrowserMonitoring from '@/pages/BrowserMonitoring.jsx';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -45,6 +46,7 @@ const AuthenticatedApp = () => {
         <Route path="/api-key" element={<UpdateApiKey />} />
         <Route path="/audit" element={<Audit />} />
         <Route path="/recordings" element={<Recordings />} />
+        <Route path="/monitoring" element={<BrowserMonitoring />} />
         <Route path="/activity" element={<Activity />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

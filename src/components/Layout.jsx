@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity, Upload, Key, MonitorPlay } from "lucide-react";
+import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity, Upload, Key, MonitorPlay, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import LiveTerminal from "@/components/terminal/LiveTerminal";
@@ -19,7 +19,8 @@ const NAV = [
   { to: "/credentials", label: "Credentials", icon: KeyRound },
   { to: "/import", label: "Bulk Import", icon: Upload },
   { to: "/runs", label: "Test runs", icon: Play },
-  { to: "/recordings", label: "Live Look / Recordings", icon: MonitorPlay },
+  { to: "/recordings", label: "Captures", icon: MonitorPlay },
+  { to: "/monitoring", label: "Browser Monitoring", icon: Eye },
   { to: "/audit", label: "Audit log", icon: Radio },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -31,7 +32,8 @@ const TITLES = {
   "/credentials": "Credentials · Aussie Dual-Casino Tester",
   "/import": "Bulk Import · Aussie Dual-Casino Tester",
   "/runs": "Test runs · Aussie Dual-Casino Tester",
-  "/recordings": "Live Look / Recordings · Aussie Dual-Casino Tester",
+  "/recordings": "Captures · Aussie Dual-Casino Tester",
+  "/monitoring": "Browser Monitoring · Aussie Dual-Casino Tester",
   "/audit": "Audit log · Aussie Dual-Casino Tester",
   "/settings": "Settings · Aussie Dual-Casino Tester",
   "/api-key": "Update API Key · Aussie Dual-Casino Tester",

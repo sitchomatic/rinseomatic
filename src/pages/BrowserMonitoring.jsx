@@ -6,11 +6,33 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Activity, Camera, Video, MonitorPlay, CheckCircle2, AlertTriangle, ExternalLink, PlaySquare } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Activity, Camera, Video, MonitorPlay, CheckCircle2, AlertTriangle, ExternalLink, PlaySquare, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function BrowserMonitoring() {
   const [scrapingbeeStatus, setScrapingbeeStatus] = useState(null);
   const [browserlessStatus, setBrowserlessStatus] = useState(null);
+
+  const [screenshotDialogOpen, setScreenshotDialogOpen] = useState(false);
+  const [screenshotUrl, setScreenshotUrl] = useState("");
+  const [screenshotResult, setScreenshotResult] = useState(null);
+
+  const requestScreenshotMut = useMutation({
+    mutationFn: async (target_url) => {
+      const res = await base44.functions.invoke("requestBrowserlessScreenshot", { target_url });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setScreenshotResult(`data:image/jpeg;base64,${data.screenshot_b64}`);
+      toast.success("Screenshot captured successfully!");
+    },
+    onError: (e) => {
+      toast.error(e?.response?.data?.error || e.message || "Failed to capture screenshot");
+    }
+  });
 
   const { data: recentScreenshots = [] } = useQuery({
     queryKey: ["recent-screenshots"],
@@ -187,7 +209,13 @@ export default function BrowserMonitoring() {
                 <p className="text-xs text-muted-foreground">
                   Browserless supports a dedicated <code className="bg-muted px-1 rounded">/screenshot</code> REST API for on-demand captures of persistent sessions.
                 </p>
-                <Button size="sm" variant="secondary" className="w-full text-xs h-7" disabled={!browserlessStatus?.ok}>
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  className="w-full text-xs h-7" 
+                  disabled={!browserlessStatus?.ok}
+                  onClick={() => { setScreenshotResult(null); setScreenshotUrl("https://example.com"); setScreenshotDialogOpen(true); }}
+                >
                   <Camera className="h-3 w-3 mr-2" /> Request Capture
                 </Button>
               </div>
@@ -201,7 +229,13 @@ export default function BrowserMonitoring() {
                 <p className="text-xs text-muted-foreground">
                   Browserless can record the DOM (Session Replay) or raw video when the <code className="bg-muted px-1 rounded">record</code> capability is enabled during session launch.
                 </p>
-                <Button size="sm" variant="secondary" className="w-full text-xs h-7" disabled={!browserlessStatus?.ok}>
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  className="w-full text-xs h-7" 
+                  disabled={!browserlessStatus?.ok}
+                  onClick={() => window.open('https://cloud.browserless.io/sessions', '_blank')}
+                >
                   <PlaySquare className="h-3 w-3 mr-2" /> View Replays
                 </Button>
               </div>
@@ -218,10 +252,20 @@ export default function BrowserMonitoring() {
                 {browserlessStatus?.sessions?.length > 0 ? (
                   <div className="bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-md flex items-center justify-between">
                     <span className="text-xs text-emerald-400 font-mono">Session active</span>
-                    <Button size="sm" className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-500">Connect</Button>
+                    <Button 
+                      size="sm" 
+                      className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-500"
+                      onClick={() => window.open(browserlessStatus.sessions[0]?.debuggerUrl || 'https://chrome.browserless.io/debugger', '_blank')}
+                    >Connect</Button>
                   </div>
                 ) : (
-                  <Button size="sm" variant="secondary" className="w-full text-xs h-7 gap-2" disabled={!browserlessStatus?.ok}>
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="w-full text-xs h-7 gap-2" 
+                    disabled={!browserlessStatus?.ok}
+                    onClick={() => window.open('https://chrome.browserless.io/debugger', '_blank')}
+                  >
                     <ExternalLink className="h-3 w-3" /> Open Debugger
                   </Button>
                 )}
@@ -232,6 +276,56 @@ export default function BrowserMonitoring() {
         </section>
 
       </div>
+
+      <Dialog open={screenshotDialogOpen} onOpenChange={setScreenshotDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Request Browserless Capture</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {!screenshotResult ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Target URL</Label>
+                  <Input 
+                    placeholder="https://google.com" 
+                    value={screenshotUrl} 
+                    onChange={(e) => setScreenshotUrl(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">The headless browser will navigate to this URL and capture a full-page JPEG.</p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setScreenshotDialogOpen(false)}>Cancel</Button>
+                  <Button 
+                    onClick={() => requestScreenshotMut.mutate(screenshotUrl)}
+                    disabled={requestScreenshotMut.isPending || !screenshotUrl}
+                  >
+                    {requestScreenshotMut.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {requestScreenshotMut.isPending ? "Capturing..." : "Capture Screenshot"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="border border-border rounded-md overflow-hidden bg-black/50 max-h-[50vh] overflow-y-auto thin-scroll">
+                  <img src={screenshotResult} alt="Browserless capture" className="w-full h-auto" />
+                </div>
+                <div className="flex justify-between items-center">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = screenshotResult;
+                    link.download = 'browserless-capture.jpg';
+                    link.click();
+                  }}>
+                    <Download className="w-4 h-4 mr-2" /> Download
+                  </Button>
+                  <Button onClick={() => setScreenshotResult(null)}>New Capture</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

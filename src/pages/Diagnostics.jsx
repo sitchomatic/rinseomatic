@@ -112,33 +112,54 @@ export default function Diagnostics() {
     onError: (e) => toast.error(e?.message || "Failed to launch retry")
   });
 
-  const exportLogs = async () => {
-    toast.loading("Gathering logs for export...");
+  const exportLogs = async (format) => {
+    toast.loading(`Gathering logs for ${format.toUpperCase()} export...`);
     try {
       const [allResults, allLogs] = await Promise.all([
         base44.entities.TestResult.list("-created_date", 10000),
         base44.entities.ActionLog.list("-timestamp", 10000)
       ]);
       
-      const combined = {
-        exported_at: new Date().toISOString(),
-        test_results: allResults,
-        action_logs: allLogs
-      };
+      let blob;
+      let filename;
 
-      const blob = new Blob([JSON.stringify(combined, null, 2)], { type: "application/json" });
+      if (format === 'json') {
+        const combined = {
+          exported_at: new Date().toISOString(),
+          test_results: allResults,
+          action_logs: allLogs
+        };
+        blob = new Blob([JSON.stringify(combined, null, 2)], { type: "application/json" });
+        filename = `diagnostics-export-${new Date().toISOString().split('T')[0]}.json`;
+      } else {
+        // CSV Export for Test Results (the most useful operational metric)
+        const headers = ["Run ID", "Site", "Username", "Status", "Attempts", "Elapsed MS", "Tested At", "Error Message"];
+        const rows = allResults.map(r => [
+          r.run_id, r.site_key, r.username, r.status, r.attempts || 0, r.elapsed_ms || 0, r.tested_at || r.created_date, 
+          (r.error_message || "").replace(/"/g, '""').replace(/\n/g, ' ')
+        ]);
+        
+        const csvContent = [
+          headers.join(","),
+          ...rows.map(row => row.map(cell => `"${cell || ''}"`).join(","))
+        ].join("\n");
+
+        blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        filename = `diagnostics-results-${new Date().toISOString().split('T')[0]}.csv`;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `diagnostics-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      toast.success("Logs exported successfully");
+      toast.success(`Logs exported successfully as ${format.toUpperCase()}`);
     } catch (err) {
-      toast.error("Failed to export logs: " + err.message);
+      toast.error(`Failed to export logs: ${err.message}`);
     }
   };
 
@@ -146,12 +167,17 @@ export default function Diagnostics() {
     <div className="px-6 md:px-10 py-8 max-w-[1400px] mx-auto">
       <PageHeader
         eyebrow="Analysis"
-        title="Diagnostics & Recovery"
+        title="Diagnostics & Self-Healing"
         description="Comprehensive error analysis, automatic pattern detection, and intelligent recovery suggestions."
         actions={
-          <Button size="sm" variant="outline" className="gap-2" onClick={exportLogs}>
-            <Download className="h-4 w-4" /> Export Complete Logs
-          </Button>
+          <>
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => exportLogs('csv')}>
+              <Download className="h-4 w-4" /> Export CSV
+            </Button>
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => exportLogs('json')}>
+              <Download className="h-4 w-4" /> Export JSON
+            </Button>
+          </>
         }
       />
 
@@ -210,12 +236,12 @@ export default function Diagnostics() {
                 <CardContent className="py-2 flex-1">
                   <div className="bg-background/50 rounded-md p-3 border border-border/50">
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Info className="h-3 w-3" /> Recommendation
+                      <Info className="h-3 w-3" /> Remediation Suggestion
                     </div>
                     <p className="text-xs">
-                      {isBlocked && "The site is blocking the current proxy. Select an alternative pristine proxy and retry the affected credentials."}
-                      {isConfig && "The site selectors appear to be broken or out of date. Update the site configuration before retrying."}
-                      {isTransient && "Temporary network or provider failure. A standard retry usually resolves this."}
+                      {isBlocked && "Detected Anti-Bot/IP Block. Rotate session proxy to a residential or stealth endpoint, then retry."}
+                      {isConfig && "Detected Structural Change. Selectors timed out or login URL failed. Update the site configuration before retrying."}
+                      {isTransient && "Detected Transient Failure (429 Rate Limit or Connection Reset). A standard retry usually resolves this."}
                     </p>
                   </div>
                   
@@ -256,7 +282,7 @@ export default function Diagnostics() {
                       disabled={launchRetryMut.isPending}
                     >
                       <RefreshCw className={`h-3 w-3 mr-2 ${launchRetryMut.isPending ? 'animate-spin' : ''}`} /> 
-                      Retry {issue.count} Credentials
+                      Retry with Suggestions ({issue.count} Credentials)
                     </Button>
                   )}
                 </CardFooter>

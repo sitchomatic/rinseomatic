@@ -17,6 +17,7 @@ import Audit from '@/pages/Audit.jsx';
 import Activity from '@/pages/Activity.jsx';
 import Recordings from '@/pages/Recordings.jsx';
 import BrowserMonitoring from '@/pages/BrowserMonitoring.jsx';
+import Diagnostics from '@/pages/Diagnostics.jsx';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -47,6 +48,7 @@ const AuthenticatedApp = () => {
         <Route path="/audit" element={<Audit />} />
         <Route path="/recordings" element={<Recordings />} />
         <Route path="/monitoring" element={<BrowserMonitoring />} />
+        <Route path="/diagnostics" element={<Diagnostics />} />
         <Route path="/activity" element={<Activity />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

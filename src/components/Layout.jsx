@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity, Upload, Key, MonitorPlay, Eye } from "lucide-react";
+import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity, Upload, Key, MonitorPlay, Eye, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import LiveTerminal from "@/components/terminal/LiveTerminal";
@@ -21,6 +21,7 @@ const NAV = [
   { to: "/runs", label: "Test runs", icon: Play },
   { to: "/recordings", label: "Captures", icon: MonitorPlay },
   { to: "/monitoring", label: "Browser Monitoring", icon: Eye },
+  { to: "/diagnostics", label: "Diagnostics", icon: Stethoscope },
   { to: "/audit", label: "Audit log", icon: Radio },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -34,6 +35,7 @@ const TITLES = {
   "/runs": "Test runs · Aussie Dual-Casino Tester",
   "/recordings": "Captures · Aussie Dual-Casino Tester",
   "/monitoring": "Browser Monitoring · Aussie Dual-Casino Tester",
+  "/diagnostics": "Diagnostics · Aussie Dual-Casino Tester",
   "/audit": "Audit log · Aussie Dual-Casino Tester",
   "/settings": "Settings · Aussie Dual-Casino Tester",
   "/api-key": "Update API Key · Aussie Dual-Casino Tester",

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Activity } from "lucide-react";
 
 // Launches a TestRun against the selected target site for the chosen credentials.
 // Creates the TestRun record, then bulkCreates one queued TestResult per credential.
@@ -24,6 +25,7 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
   const [proxyMode, setProxyMode] = React.useState("default");
   const [countryCode, setCountryCode] = React.useState("");
   const [externalProxyId, setExternalProxyId] = React.useState("");
+  const [healthCheckResult, setHealthCheckResult] = React.useState(null);
 
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
@@ -44,6 +46,7 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
       setProxyMode("default");
       setCountryCode("");
       setExternalProxyId("");
+      setHealthCheckResult(null);
     }
   }, [open]);
 
@@ -54,6 +57,31 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
       if (first) setSiteKey(first.key);
     }
   }, [sites, siteKey]);
+
+  const healthCheckMut = useMutation({
+    mutationFn: async () => {
+      if (!credentialIds || credentialIds.length === 0) throw new Error("No credentials selected");
+      const CHUNK = 100;
+      const creds = [];
+      for (let i = 0; i < credentialIds.length; i += CHUNK) {
+        const batch = credentialIds.slice(i, i + CHUNK);
+        const found = await base44.entities.Credential.filter({ id: { $in: batch } }, "-created_date", CHUNK);
+        creds.push(...found);
+      }
+      const invalid = creds.filter(c => !c.username?.trim() || !c.password?.trim() || c.username.trim().length < 2 || c.password.trim().length < 2);
+      return { total: creds.length, invalid: invalid.length, samples: invalid.slice(0, 3).map(c => c.username || "(empty)") };
+    },
+    onSuccess: (data) => {
+      if (data.invalid > 0) {
+        toast.error(`Health check failed: ${data.invalid} invalid credentials found.`);
+        setHealthCheckResult({ ok: false, message: `Found ${data.invalid} structurally invalid credential(s) (e.g. missing username/password). Samples: ${data.samples.join(", ")}` });
+      } else {
+        toast.success(`Health check passed: All ${data.total} credentials valid.`);
+        setHealthCheckResult({ ok: true, message: `All ${data.total} credentials passed structural validation.` });
+      }
+    },
+    onError: (e) => toast.error(e?.message || "Health check failed")
+  });
 
   const launchMut = useMutation({
     mutationFn: async () => {
@@ -68,6 +96,12 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
         const batch = credentialIds.slice(i, i + CHUNK);
         const found = await base44.entities.Credential.filter({ id: { $in: batch } }, "-created_date", CHUNK);
         creds.push(...found);
+      }
+
+      // Pre-run health check
+      const invalidCreds = creds.filter(c => !c.username?.trim() || !c.password?.trim() || c.username.trim().length < 2 || c.password.trim().length < 2);
+      if (invalidCreds.length > 0) {
+        throw new Error(`Health Check Failed: ${invalidCreds.length} credential(s) have missing or structurally invalid usernames/passwords. Please run a Health Check or fix them before launching.`);
       }
 
       const run = await base44.entities.TestRun.create({
@@ -167,6 +201,12 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
             </Field>
           </div>
 
+          {healthCheckResult && (
+            <div className={`p-3 rounded-md border text-sm ${healthCheckResult.ok ? "bg-green-500/10 border-green-500/30 text-green-600" : "bg-rose-500/10 border-rose-500/30 text-rose-500"}`}>
+              {healthCheckResult.message}
+            </div>
+          )}
+
           <div className="rounded-md border border-border bg-background/40 p-3 space-y-3">
             <div className="text-xs font-medium">Proxy override</div>
             <div className="grid grid-cols-3 gap-3">
@@ -200,7 +240,11 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => healthCheckMut.mutate()} disabled={count === 0 || healthCheckMut.isPending || launchMut.isPending} className="sm:mr-auto gap-2">
+            <Activity className="h-4 w-4" />
+            {healthCheckMut.isPending ? "Checking…" : "Health Check"}
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={() => launchMut.mutate()} disabled={!siteKey || count === 0 || launchMut.isPending}>
             {launchMut.isPending ? "Launching…" : `Launch run`}

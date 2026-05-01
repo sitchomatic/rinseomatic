@@ -11,6 +11,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatusPill from "@/components/shared/StatusPill";
 import SiteChip from "@/components/shared/SiteChip";
 import ResultsTable from "@/components/runs/ResultsTable";
+import RunScreenshotsGallery from "@/components/runs/RunScreenshotsGallery";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import RerunFailedDialog from "@/components/runs/RerunFailedDialog";
 import { formatMs } from "@/lib/sites";
@@ -210,9 +211,14 @@ export default function RunDetail() {
           <TabsTrigger value="failed">Failed <span className="ml-2 text-rose-300 font-mono">{buckets.failed.length}</span></TabsTrigger>
           <TabsTrigger value="error">Error <span className="ml-2 text-amber-300 font-mono">{buckets.error.length}</span></TabsTrigger>
           <TabsTrigger value="queued">Queued <span className="ml-2 text-muted-foreground font-mono">{buckets.queued.length}</span></TabsTrigger>
+          <TabsTrigger value="screenshots">Screenshots</TabsTrigger>
         </TabsList>
         <TabsContent value={tab}>
-          <ResultsTable results={filtered} />
+          {tab === "screenshots" ? (
+            <RunScreenshotsGallery results={results} isRunning={run.status === "running" || run.status === "queued"} />
+          ) : (
+            <ResultsTable results={filtered} />
+          )}
         </TabsContent>
       </Tabs>
 

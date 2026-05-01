@@ -68,7 +68,11 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
         const found = await base44.entities.Credential.filter({ id: { $in: batch } }, "-created_date", CHUNK);
         creds.push(...found);
       }
-      const invalid = creds.filter(c => !c.username?.trim() || !c.password?.trim() || c.username.trim().length < 2 || c.password.trim().length < 2);
+      const invalid = creds.filter(c => {
+        const u = c.username?.trim();
+        const p = c.password?.trim();
+        return !u || !p || p.length <= 7 || !/\d/.test(p) || !/[a-zA-Z]/.test(p);
+      });
       return { total: creds.length, invalid: invalid.length, samples: invalid.slice(0, 3).map(c => c.username || "(empty)") };
     },
     onSuccess: (data) => {
@@ -99,7 +103,11 @@ export default function NewRunDialog({ open, onOpenChange, credentialIds, onLaun
       }
 
       // Pre-run health check
-      const invalidCreds = creds.filter(c => !c.username?.trim() || !c.password?.trim() || c.username.trim().length < 2 || c.password.trim().length < 2);
+      const invalidCreds = creds.filter(c => {
+        const u = c.username?.trim();
+        const p = c.password?.trim();
+        return !u || !p || p.length <= 7 || !/\d/.test(p) || !/[a-zA-Z]/.test(p);
+      });
       if (invalidCreds.length > 0) {
         throw new Error(`Health Check Failed: ${invalidCreds.length} credential(s) have missing or structurally invalid usernames/passwords. Please run a Health Check or fix them before launching.`);
       }

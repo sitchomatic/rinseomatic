@@ -5,6 +5,8 @@ import { formatMs } from "@/lib/sites";
 import { format } from "date-fns";
 import { ExternalLink, Copy, Check } from "lucide-react";
 import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 
 // Pull "[Class] message" tag out of error_message.
 function splitTag(msg) {
@@ -20,6 +22,14 @@ function splitTag(msg) {
 export default function ResultDetailDialog({ result, onOpenChange }) {
   const open = !!result;
   const { copy, copiedKey } = useCopyToClipboard();
+  
+  const { data: screenshots = [] } = useQuery({
+    queryKey: ["screenshots", result?.id],
+    queryFn: () => base44.entities.Screenshot.filter({ session_id: result?.id }, "-captured_at", 100),
+    refetchInterval: 500,
+    enabled: open,
+  });
+
   if (!result) return null;
   const { label, message } = splitTag(result.error_message);
 
@@ -86,11 +96,29 @@ export default function ResultDetailDialog({ result, onOpenChange }) {
             </Section>
           )}
 
-          {result.screenshot_url && (
-            <Section title="Screenshot">
-              <a href={result.screenshot_url} target="_blank" rel="noopener noreferrer" className="block rounded-md border border-border overflow-hidden bg-black">
-                <img src={result.screenshot_url} alt="run screenshot" className="w-full h-auto block" />
-              </a>
+          {(result.screenshot_url || screenshots.length > 0) && (
+            <Section title="Screenshots">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {result.screenshot_url && (
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">Final Capture</div>
+                    <a href={result.screenshot_url} target="_blank" rel="noopener noreferrer" className="block rounded-md border border-border overflow-hidden bg-black aspect-video relative group">
+                      <img src={result.screenshot_url} alt="final screenshot" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  </div>
+                )}
+                {screenshots.map(shot => (
+                  <div key={shot.id} className="space-y-1.5">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono flex justify-between">
+                      <span>{shot.step_label || "Step"}</span>
+                      <span>{format(new Date(shot.captured_at), "HH:mm:ss")}</span>
+                    </div>
+                    <a href={shot.image_url} target="_blank" rel="noopener noreferrer" className="block rounded-md border border-border overflow-hidden bg-black aspect-video relative group">
+                      <img src={shot.image_url} alt={shot.step_label || "screenshot"} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  </div>
+                ))}
+              </div>
             </Section>
           )}
         </div>

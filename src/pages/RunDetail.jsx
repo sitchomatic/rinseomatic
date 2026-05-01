@@ -33,7 +33,7 @@ export default function RunDetail() {
     // (saves ~30 requests/min per open tab indefinitely).
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s === "running" || s === "queued" ? 2000 : false;
+      return s === "running" || s === "queued" ? 500 : false;
     },
     enabled: !!id,
   });

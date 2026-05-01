@@ -19,7 +19,7 @@ export default function Runs() {
     refetchInterval: (q) => {
       const list = q.state.data || [];
       const anyActive = list.some((r) => r.status === "running" || r.status === "queued");
-      return anyActive ? 3000 : false;
+      return anyActive ? 500 : false;
     },
   });
   const { data: sites = [] } = useQuery({

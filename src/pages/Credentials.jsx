@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Key, Plus, Trash2, Play, Upload, Search } from "lucide-react";
 import { toast } from "sonner";
 import NewRunDialog from "@/components/credentials/NewRunDialog";
-import CsvImportDialog from "@/components/credentials/CsvImportDialog";
+
 import AddCredentialDialog from "@/components/credentials/AddCredentialDialog";
 import PasswordCell from "@/components/credentials/PasswordCell";
 
@@ -21,7 +21,7 @@ export default function Credentials() {
   const [selected, setSelected] = React.useState(() => new Set());
   const [search, setSearch] = React.useState("");
   const [showAdd, setShowAdd] = React.useState(false);
-  const [showImport, setShowImport] = React.useState(false);
+
   const [showRun, setShowRun] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
@@ -84,8 +84,8 @@ export default function Credentials() {
         description="Username + password records. Test any selection against Joe Fortune and Ignition."
         actions={
           <>
-            <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImport(true)}>
-              <Upload className="h-3.5 w-3.5" /> Import CSV
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => navigate("/import")}>
+              <Upload className="h-3.5 w-3.5" /> Bulk Import
             </Button>
             <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowAdd(true)}>
               <Plus className="h-3.5 w-3.5" /> Add
@@ -137,8 +137,8 @@ export default function Credentials() {
           description="Add credentials manually or import a CSV to get started."
           action={
             <div className="flex items-center justify-center gap-2">
-              <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImport(true)}>
-                <Upload className="h-3.5 w-3.5" /> Import CSV
+              <Button size="sm" variant="outline" className="gap-2" onClick={() => navigate("/import")}>
+                <Upload className="h-3.5 w-3.5" /> Bulk Import
               </Button>
               <Button size="sm" className="gap-2" onClick={() => setShowAdd(true)}>
                 <Plus className="h-3.5 w-3.5" /> Add manually
@@ -176,7 +176,7 @@ export default function Credentials() {
       )}
 
       <AddCredentialDialog open={showAdd} onOpenChange={setShowAdd} />
-      <CsvImportDialog open={showImport} onOpenChange={setShowImport} />
+
       <NewRunDialog
         open={showRun}
         onOpenChange={setShowRun}

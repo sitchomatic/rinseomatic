@@ -8,6 +8,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import Layout from '@/components/Layout';
 import Dashboard from '@/pages/Dashboard.jsx';
 import Credentials from '@/pages/Credentials.jsx';
+import BulkImport from '@/pages/BulkImport.jsx';
 import Runs from '@/pages/Runs';
 import RunDetail from '@/pages/RunDetail';
 import Settings from '@/pages/Settings';
@@ -35,6 +36,7 @@ const AuthenticatedApp = () => {
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/credentials" element={<Credentials />} />
+        <Route path="/import" element={<BulkImport />} />
         <Route path="/runs" element={<Runs />} />
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/settings" element={<Settings />} />

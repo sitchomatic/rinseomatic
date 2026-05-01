@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity } from "lucide-react";
+import { LayoutDashboard, KeyRound, Play, Settings as SettingsIcon, Shield, Radio, Activity, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import LiveTerminal from "@/components/terminal/LiveTerminal";
@@ -17,6 +17,7 @@ startLogStreamer();
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/credentials", label: "Credentials", icon: KeyRound },
+  { to: "/import", label: "Bulk Import", icon: Upload },
   { to: "/runs", label: "Test runs", icon: Play },
   { to: "/audit", label: "Audit log", icon: Radio },
   { to: "/activity", label: "Activity", icon: Activity },
@@ -26,6 +27,7 @@ const NAV = [
 const TITLES = {
   "/": "Dashboard · Aussie Dual-Casino Tester",
   "/credentials": "Credentials · Aussie Dual-Casino Tester",
+  "/import": "Bulk Import · Aussie Dual-Casino Tester",
   "/runs": "Test runs · Aussie Dual-Casino Tester",
   "/audit": "Audit log · Aussie Dual-Casino Tester",
   "/settings": "Settings · Aussie Dual-Casino Tester",

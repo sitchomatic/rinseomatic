@@ -3,8 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Activity as ActivityIcon, Loader2, CheckCircle2, XCircle, PlayCircle } from "lucide-react";
+import { Activity as ActivityIcon, Loader2, CheckCircle2, XCircle, PlayCircle, Download } from "lucide-react";
+import { toCsv, downloadFile } from "@/lib/download";
+import { toast } from "sonner";
 
 export default function Activity() {
   const { data: logs, isLoading } = useQuery({
@@ -22,6 +25,29 @@ export default function Activity() {
       case "running": return <PlayCircle className="w-4 h-4 text-info" />;
       default: return <ActivityIcon className="w-4 h-4 text-muted-foreground" />;
     }
+  };
+
+  const exportCsv = () => {
+    if (!logs?.length) return toast.error("No activity to export");
+    const csv = toCsv(logs, [
+      { label: "ID", key: "id" },
+      { label: "Time", value: (l) => l.timestamp || l.created_date },
+      { label: "Target", key: "target" },
+      { label: "Name", key: "name" },
+      { label: "Status", key: "status" },
+      { label: "Metadata", key: "metadata" },
+    ]);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadFile(`activity-${stamp}.csv`, csv);
+    toast.success(`Exported ${logs.length} activity records`);
+  };
+
+  const exportJson = () => {
+    if (!logs?.length) return toast.error("No activity to export");
+    const json = JSON.stringify(logs, null, 2);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadFile(`activity-${stamp}.json`, json, "application/json");
+    toast.success(`Exported ${logs.length} activity records as JSON`);
   };
 
   const getStatusColor = (status) => {
@@ -42,7 +68,15 @@ export default function Activity() {
           <h1 className="text-2xl font-bold tracking-tight">Activity Dashboard</h1>
           <p className="text-muted-foreground">Monitor Cloud Function executions and Stagehand runs.</p>
         </div>
-        <ActivityIcon className="w-8 h-8 text-muted-foreground opacity-50" />
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!logs?.length} className="gap-2">
+            <Download className="w-4 h-4" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportJson} disabled={!logs?.length} className="gap-2">
+            <Download className="w-4 h-4" /> Export JSON
+          </Button>
+          <ActivityIcon className="w-8 h-8 text-muted-foreground opacity-50 ml-2" />
+        </div>
       </div>
 
       <Card>

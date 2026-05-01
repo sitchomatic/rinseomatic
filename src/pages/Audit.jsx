@@ -4,10 +4,11 @@ import AuditFilters from "@/components/audit/AuditFilters";
 import LogRow from "@/components/audit/LogRow";
 import { useLiveLogs } from "@/lib/useLiveLogs";
 import { Button } from "@/components/ui/button";
-import { Trash2, Radio } from "lucide-react";
+import { Trash2, Radio, Download } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { toCsv, downloadFile } from "@/lib/download";
 
 export default function Audit() {
   const [search, setSearch] = React.useState("");
@@ -36,6 +37,31 @@ export default function Audit() {
     if (!autoscroll || paused) return;
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [filtered.length, autoscroll, paused]);
+
+  const exportCsv = () => {
+    if (!filtered.length) return toast.error("No logs to export");
+    const csv = toCsv(filtered, [
+      { label: "ID", key: "id" },
+      { label: "Time", value: (l) => l.timestamp || l.created_date },
+      { label: "Level", key: "level" },
+      { label: "Category", key: "category" },
+      { label: "Site", key: "site" },
+      { label: "Session ID", key: "session_id" },
+      { label: "Delta MS", key: "delta_ms" },
+      { label: "Message", key: "message" },
+    ]);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadFile(`audit-logs-${stamp}.csv`, csv);
+    toast.success(`Exported ${filtered.length} logs`);
+  };
+
+  const exportJson = () => {
+    if (!filtered.length) return toast.error("No logs to export");
+    const json = JSON.stringify(filtered, null, 2);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadFile(`audit-logs-${stamp}.json`, json, "application/json");
+    toast.success(`Exported ${filtered.length} logs as JSON`);
+  };
 
   const clearAll = async () => {
     try {
@@ -69,14 +95,22 @@ export default function Audit() {
         title="Audit Log"
         description="Every event as it happens — credential tests, run lifecycle, network probes, cancellations. Streamed in real time."
         actions={
-          <Button
-            variant="outline" size="sm"
-            className="gap-2 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 border-rose-500/30"
-            onClick={() => setConfirmClear(true)}
-            disabled={logs.length === 0}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Clear log
-          </Button>
+          <>
+            <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={exportJson} disabled={filtered.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Export JSON
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              className="gap-2 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 border-rose-500/30"
+              onClick={() => setConfirmClear(true)}
+              disabled={logs.length === 0}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Clear log
+            </Button>
+          </>
         }
       />
 

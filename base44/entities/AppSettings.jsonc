@@ -7,6 +7,10 @@
       "default": "global",
       "description": "Always 'global' \u2014 there is only one settings record."
     },
+    "scrapingbee_api_key": {
+      "type": "string",
+      "description": "ScrapingBee API Key"
+    },
     "v8_logic_enabled": {
       "type": "boolean",
       "default": true,
@@ -122,7 +126,11 @@
         "role": "admin"
       }
     },
-    "read": {},
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
     "update": {
       "user_condition": {
         "role": "admin"

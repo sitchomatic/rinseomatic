@@ -12,8 +12,10 @@ import BulkImport from '@/pages/BulkImport.jsx';
 import Runs from '@/pages/Runs';
 import RunDetail from '@/pages/RunDetail';
 import Settings from '@/pages/Settings';
+import UpdateApiKey from '@/pages/UpdateApiKey.jsx';
 import Audit from '@/pages/Audit.jsx';
 import Activity from '@/pages/Activity.jsx';
+import Recordings from '@/pages/Recordings.jsx';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -40,7 +42,9 @@ const AuthenticatedApp = () => {
         <Route path="/runs" element={<Runs />} />
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/api-key" element={<UpdateApiKey />} />
         <Route path="/audit" element={<Audit />} />
+        <Route path="/recordings" element={<Recordings />} />
         <Route path="/activity" element={<Activity />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

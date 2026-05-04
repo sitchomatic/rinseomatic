@@ -21,7 +21,10 @@
         "running",
         "working",
         "failed",
-        "error"
+        "error",
+        "noaccount",
+        "tempdisabled",
+        "permdisabled"
       ],
       "default": "queued"
     },

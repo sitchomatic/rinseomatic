@@ -56,6 +56,13 @@ async function testOne(base44, site, result, run) {
       return { status: 'error', error_message: 'Credential deleted', elapsed_ms: 0 };
     }
 
+    if (credential.perm_disabled) {
+      return { status: 'permdisabled', error_message: 'Permanently disabled (skipped)', elapsed_ms: 0 };
+    }
+    if (credential.temp_disabled_until && new Date(credential.temp_disabled_until).getTime() > Date.now()) {
+      return { status: 'tempdisabled', error_message: 'Temporarily disabled cooldown active (skipped)', elapsed_ms: 0 };
+    }
+
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
     const settings = settingsRows[0] || {};
     const apiKey = settings.scrapingbee_api_key || Deno.env.get('SCRAPINGBEE_API_KEY');
@@ -272,8 +279,18 @@ Deno.serve(async (req) => {
         tested_at: new Date().toISOString(),
         screenshot_url: o.screenshot_url || null,
       });
-      // Per-credential status mirroring removed — credentials are now global
-      // (no per-site status). Per-(credential, site) outcomes live in TestResult.
+      
+      // Post-flight credential updates for disabled accounts
+      if (finalStatus === 'tempdisabled') {
+        const cooldown = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        await base44.asServiceRole.entities.Credential.update(r.credential_id, {
+          temp_disabled_until: cooldown
+        });
+      } else if (finalStatus === 'permdisabled') {
+        await base44.asServiceRole.entities.Credential.update(r.credential_id, {
+          perm_disabled: true
+        });
+      }
     }));
 
     // A2: Incremental counter update. Compute deltas from THIS batch's outcomes
@@ -287,7 +304,7 @@ Deno.serve(async (req) => {
       if (willRetry) continue; // stays queued, no counter change (was running, going back to queued)
       dPending -= 1; // leaving the queued/running pool
       if (o.status === 'working') dWorking += 1;
-      else if (o.status === 'failed') dFailed += 1;
+      else if (o.status === 'failed' || o.status === 'noaccount' || o.status === 'tempdisabled' || o.status === 'permdisabled') dFailed += 1;
       else dErrored += 1;
     }
     // Note: rows that go back to 'queued' (retry) were 'running' in our pool —

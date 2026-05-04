@@ -154,8 +154,6 @@ function classify(site, sbJson) {
   const tasksArray = Array.isArray(report.tasks) ? report.tasks : [];
   const tasksString = tasksArray.map((t) => `${t.action}:${t.status}(${Math.round(t.time || t.duration || 0)}ms)`).join(' | ');
 
-  // 1. If a documented instruction failed BEFORE submit (wait_for / fill),
-  //    selectors are wrong → config error.
   const preSubmitFail = tasksArray.find(
     (t) => t.status && t.status !== 'success' && (t.action === 'wait_for' || t.action === 'fill')
   );
@@ -164,7 +162,6 @@ function classify(site, sbJson) {
     return { status: 'error', error: `${which}: ${preSubmitFail.task || ''}`.trim(), tasks_string: tasksString };
   }
 
-  // 2. URL-based detection (matches the existing Browserless logic).
   const lower = (resolvedUrl || '').toLowerCase();
   const blocked = BLOCK_MARKERS.some((m) => lower.includes(m));
   const loginMarker = (site.login_url_marker || '/login').toLowerCase();
@@ -173,17 +170,9 @@ function classify(site, sbJson) {
     ? lower.includes(site.success_url_contains.toLowerCase())
     : false;
 
-  // 3. Success-selector detection — search the returned HTML body.
-  //    ScrapingBee returns the post-scenario HTML, so a present selector means
-  //    the success element rendered. We only do a substring check on a stripped
-  //    selector (id/class) since we don't have a DOM here. Conservative: only
-  //    treat as a positive marker if the selector is unambiguously class/id-based.
   const successSel = site.success_selector || '';
   let markerFound = false;
   if (successSel && body) {
-    // Pull each id (#x) and class (.x) token from the selector and check if
-    // the HTML contains that id/class attribute. Avoids false positives from
-    // matching arbitrary substrings.
     const tokens = [];
     successSel.split(/[\s,>+~]+/).forEach((part) => {
       const idMatch = part.match(/#([\w-]+)/);
@@ -199,15 +188,20 @@ function classify(site, sbJson) {
     }
   }
 
-  const disabled = body.toLowerCase().includes('has been disabled') || body.toLowerCase().includes('temporarily disabled') || body.toLowerCase().includes('disabled');
+  const lowerBody = body.toLowerCase();
+  const permDisabled = lowerBody.includes('been disabled');
+  const tempDisabled = lowerBody.includes('temporarily disabled');
+
+  if (permDisabled) return { status: 'permdisabled', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
+  if (tempDisabled) return { status: 'tempdisabled', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
 
   if (markerFound || successUrl) {
-    return { status: 'working', final_url: resolvedUrl, marker: markerFound, disabled, tasks_string: tasksString };
+    return { status: 'working', final_url: resolvedUrl, marker: markerFound, tasks_string: tasksString };
   }
   if (site.lenient_success && !stayedLogin && !blocked) {
-    return { status: 'working', final_url: resolvedUrl, marker: false, disabled, tasks_string: tasksString };
+    return { status: 'working', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
   }
-  return { status: 'failed', final_url: resolvedUrl, marker: false, disabled, tasks_string: tasksString };
+  return { status: 'failed', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
 }
 
 // Strip the api_key from a ScrapingBee URL so it's safe to log.
@@ -305,16 +299,24 @@ async function uploadScreenshot(base44, b64, site_key, username) {
 
 // ------------ Per-site test (handles password strategy) ------------
 async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy, base44) {
-  const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
+  let list = [passwords[0]];
+  if (strategy !== 'single') {
+    if (passwords.length > 1) {
+      const p1 = passwords[0], p2 = passwords[1] || p1, p3 = passwords[2] || p2;
+      list = [p1, p2, p3, p3];
+    } else {
+      const p1 = passwords[0];
+      list = [p1, p1 + '!', p1 + '!!', p1 + '!!'];
+    }
+  }
+
   let lastFailed = null;
   let lastError = null;
   let totalElapsed = 0;
-  // Track the final-attempt screenshot — we only persist one per credential
-  // to keep file storage tidy. Working > failed > error precedence is implicit
-  // because we return early on 'working'.
   let lastScreenshot = null;
 
-  for (const pw of list) {
+  for (let i = 0; i < list.length; i++) {
+    const pw = list[i];
     const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw, base44, site.key);
     totalElapsed += r.elapsed || 0;
     if (r.screenshot_b64) lastScreenshot = r.screenshot_b64;
@@ -328,6 +330,17 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
         working_password: pw,
         elapsed_ms: totalElapsed,
         screenshot_b64: r.screenshot_b64 || null,
+      };
+    }
+    if (r.status === 'tempdisabled' || r.status === 'permdisabled') {
+      return {
+        site_key: site.key,
+        status: r.status,
+        final_url: r.final_url,
+        success_marker_found: false,
+        elapsed_ms: totalElapsed,
+        screenshot_b64: lastScreenshot,
+        error_message: r.status === 'tempdisabled' ? 'Temporarily disabled (1hr cooldown)' : 'Permanently disabled'
       };
     }
     if (r.status === 'error') {
@@ -345,12 +358,12 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
   if (lastFailed) {
     return {
       site_key: site.key,
-      status: 'failed',
+      status: 'noaccount',
       final_url: lastFailed.final_url,
       success_marker_found: false,
       elapsed_ms: totalElapsed,
       screenshot_b64: lastScreenshot,
-      error_message: lastFailed.tasks_string ? `Failed (no success marker)\nSteps: ${lastFailed.tasks_string}` : 'Failed (no success marker)',
+      error_message: lastFailed.tasks_string ? `No account (4 attempts failed)\nSteps: ${lastFailed.tasks_string}` : 'No account (4 attempts failed)',
     };
   }
   return {
@@ -373,6 +386,16 @@ function combine(perSite) {
     elapsed_ms: perSite.reduce((a, b) => a + (b.elapsed_ms || 0), 0),
     per_site: perSite,
   };
+
+  const anyPermDisabled = perSite.find((r) => r.status === 'permdisabled');
+  if (anyPermDisabled) return { ...anyPermDisabled, per_site: perSite };
+
+  const anyTempDisabled = perSite.find((r) => r.status === 'tempdisabled');
+  if (anyTempDisabled) return { ...anyTempDisabled, per_site: perSite };
+
+  const anyNoAccount = perSite.find((r) => r.status === 'noaccount');
+  if (anyNoAccount) return { ...anyNoAccount, per_site: perSite };
+
   const anyFailed = perSite.find((r) => r.status === 'failed');
   if (anyFailed) return {
     status: 'failed',
@@ -382,6 +405,7 @@ function combine(perSite) {
     elapsed_ms: perSite.reduce((a, b) => a + (b.elapsed_ms || 0), 0),
     per_site: perSite,
   };
+
   return {
     status: 'error',
     error_message: perSite.map((r) => `${r.site_key}: ${r.error_message || 'unknown'}`).join(' | '),
@@ -462,7 +486,16 @@ Deno.serve(async (req) => {
       try {
         logEvent(base44, { level: 'info', category: 'system', site: site_key, message: 'Initiating V8 advanced logic (multi-site parallel testing, stealth proxy)' });
         
-        const list = passwords.slice(0, strategy === 'single' ? 1 : passwords.length);
+        let list = [passwords[0]];
+        if (strategy !== 'single') {
+          if (passwords.length > 1) {
+            const p1 = passwords[0], p2 = passwords[1] || p1, p3 = passwords[2] || p2;
+            list = [p1, p2, p3, p3];
+          } else {
+            const p1 = passwords[0];
+            list = [p1, p1 + '!', p1 + '!!', p1 + '!!'];
+          }
+        }
         const statusMap = {};
         for (const s of testSites) statusMap[s.key] = { site_key: s.key, elapsed_ms: 0 };
         
@@ -496,12 +529,12 @@ Deno.serve(async (req) => {
               statusMap[sk].success_marker_found = !!r.marker;
               statusMap[sk].working_password = pw;
               earlyStop = true; // Burn rule
-            } else if (r.disabled) {
-              logEvent(base44, { level: 'warn', category: 'auth', site: sk, message: 'Disabled message detected. Early stopping V8 logic.' });
-              statusMap[sk].status = 'failed';
+            } else if (r.status === 'tempdisabled' || r.status === 'permdisabled') {
+              logEvent(base44, { level: 'warn', category: 'auth', site: sk, message: `${r.status} message detected. Early stopping V8 logic.` });
+              statusMap[sk].status = r.status;
               statusMap[sk].final_url = r.final_url;
               statusMap[sk].success_marker_found = false;
-              statusMap[sk].error_message = 'Account disabled';
+              statusMap[sk].error_message = r.status === 'tempdisabled' ? 'Temporarily disabled (1hr cooldown)' : 'Permanently disabled';
               earlyStop = true; // Early stop rule
             } else if (r.status === 'error') {
               statusMap[sk].status = 'error';
@@ -510,10 +543,10 @@ Deno.serve(async (req) => {
                 statusMap[sk].error_message += `\nSteps: ${r.tasks_string}`;
               }
             } else {
-              statusMap[sk].status = 'failed';
+              statusMap[sk].status = 'noaccount';
               statusMap[sk].final_url = r.final_url;
               statusMap[sk].success_marker_found = false;
-              statusMap[sk].error_message = r.tasks_string ? `Failed (no success marker)\nSteps: ${r.tasks_string}` : 'Failed (no success marker)';
+              statusMap[sk].error_message = r.tasks_string ? `No account (4 attempts failed)\nSteps: ${r.tasks_string}` : 'No account (4 attempts failed)';
             }
           }
 

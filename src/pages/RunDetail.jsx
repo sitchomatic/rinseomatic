@@ -90,11 +90,13 @@ export default function RunDetail() {
   // B1: Single-pass aggregator — bucket results once instead of 5 inline filters.
   // Must be declared before any early return to satisfy rules-of-hooks.
   const buckets = React.useMemo(() => {
-    const b = { all: results, working: [], failed: [], error: [], queued: [] };
+    const b = { all: results, working: [], failed: [], error: [], queued: [], noaccount: [], disabled: [] };
     for (const r of results) {
       if (r.status === "working") b.working.push(r);
       else if (r.status === "failed") b.failed.push(r);
       else if (r.status === "error") b.error.push(r);
+      else if (r.status === "noaccount") b.noaccount.push(r);
+      else if (r.status === "tempdisabled" || r.status === "permdisabled") b.disabled.push(r);
       else if (r.status === "queued" || r.status === "running") b.queued.push(r);
     }
     return b;
@@ -191,8 +193,8 @@ export default function RunDetail() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <Tile label="Progress" icon={Loader2} spin={run.status === "running"} value={`${pct}%`} sub={`${run.total_count - (run.pending_count || 0)}/${run.total_count}`} />
         <Tile label="Working" icon={CheckCircle2} accent="text-emerald-300" value={run.working_count || 0} />
-        <Tile label="Failed" icon={XCircle} accent="text-rose-300" value={run.failed_count || 0} />
-        <Tile label="Errored" icon={AlertTriangle} accent="text-amber-300" value={run.error_count || 0} />
+        <Tile label="Disabled" icon={AlertTriangle} accent="text-amber-300" value={buckets.disabled.length} sub="Temp or Perm" />
+        <Tile label="No Account" icon={XCircle} accent="text-muted-foreground" value={buckets.noaccount.length} />
         {etaLabel ? (
           <Tile label="ETA" icon={Clock} accent="text-sky-300" value={`~${etaLabel}`} sub={`${formatMs(run.elapsed_ms)} elapsed`} />
         ) : (
@@ -205,9 +207,11 @@ export default function RunDetail() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="bg-card border border-border mb-4">
+        <TabsList className="bg-card border border-border mb-4 flex-wrap h-auto">
           <TabsTrigger value="all">All <span className="ml-2 text-muted-foreground font-mono">{buckets.all.length}</span></TabsTrigger>
           <TabsTrigger value="working">Working <span className="ml-2 text-emerald-300 font-mono">{buckets.working.length}</span></TabsTrigger>
+          <TabsTrigger value="disabled">Disabled <span className="ml-2 text-amber-300 font-mono">{buckets.disabled.length}</span></TabsTrigger>
+          <TabsTrigger value="noaccount">No Acct <span className="ml-2 text-muted-foreground font-mono">{buckets.noaccount.length}</span></TabsTrigger>
           <TabsTrigger value="failed">Failed <span className="ml-2 text-rose-300 font-mono">{buckets.failed.length}</span></TabsTrigger>
           <TabsTrigger value="error">Error <span className="ml-2 text-amber-300 font-mono">{buckets.error.length}</span></TabsTrigger>
           <TabsTrigger value="queued">Queued <span className="ml-2 text-muted-foreground font-mono">{buckets.queued.length}</span></TabsTrigger>

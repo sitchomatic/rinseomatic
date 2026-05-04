@@ -69,7 +69,39 @@ Deno.serve(async (req) => {
 
     const settingsRows = await base44.asServiceRole.entities.AppSettings.list('-created_date', 1);
     const settings = settingsRows[0] || {};
+    
+    const body = await req.json().catch(() => ({}));
+    const { username, site_key } = body;
 
+    // Selective remediation logic
+    if (username || site_key) {
+      const q = { status: { $in: ['failed', 'error', 'noaccount'] } };
+      if (username) q.username = username;
+      if (site_key) q.site_key = site_key;
+      
+      const failed = await base44.asServiceRole.entities.TestResult.filter(q, '-created_date', 200);
+      if (failed.length === 0) {
+        return Response.json({ ok: true, note: 'No failed/error results found for the given criteria.' });
+      }
+
+      await Promise.all(failed.map((r) =>
+        base44.asServiceRole.entities.TestResult.update(r.id, {
+          status: 'queued',
+          error_message: '[Auto-heal] Re-queued manually via Remediation Panel',
+        })
+      ));
+
+      // Wake up the runs so the worker picks them up
+      const runIds = [...new Set(failed.map(r => r.run_id))];
+      await Promise.all(runIds.map(rid => 
+        base44.asServiceRole.entities.TestRun.update(rid, { status: 'running' })
+      ));
+      
+      await base44.asServiceRole.entities.AuditLog.create({ target: 'Cloud Function', name: 'autoHealRuns', status: 'success', metadata: JSON.stringify({ targeted_heal: true, healed: failed.length }), timestamp: new Date().toISOString() }).catch(()=>{});
+      return Response.json({ ok: true, scanned: failed.length, healed: failed, note: `Re-queued ${failed.length} test steps for targeted re-run.` });
+    }
+
+    // Default stuck-row healing logic
     const active = await base44.asServiceRole.entities.TestRun.filter(
       { status: { $in: ['running', 'queued'] } }, '-created_date', 50
     );

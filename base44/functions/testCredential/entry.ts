@@ -129,8 +129,10 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
   
   // Set explicit device to Desktop (ScrapingBee emulates full desktop signatures)
   params.set('device', 'desktop');
+  params.set('os', 'windows'); // Fix OS/UA contradiction
 
   if (settings.user_agent && !isStealth) params.set('forward_headers', 'true');
+  else if (isStealth) params.set('forward_headers', 'true'); // We'll forward the injected modern UA
 
   return `${API_BASE}?${params.toString()}`;
 }
@@ -140,11 +142,16 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
 // We use only the documented vocabulary: wait_for, fill, click, wait.
 // strict:false so a stale wait_for on the success selector doesn't abort —
 // we want the final HTML/URL even on failed logins so we can classify.
-function buildLoginScenario(site, username, password, session) {
+function buildLoginScenario(site, username, password, session, loginUrl) {
   const userSel = site.username_selector || "input[type='email'], input[name='username']";
   const passSel = site.password_selector || "input[type='password']";
   const submitSel = site.submit_selector || "button[type='submit']";
-  const waitMs = Math.min(20000, Math.max(0, site.wait_after_submit_ms || 3500));
+  const baseWaitMs = Math.min(20000, Math.max(0, site.wait_after_submit_ms || 3500));
+
+  const randomize = (ms) => {
+    const variance = ms * 0.3;
+    return Math.floor(ms - variance + Math.random() * (variance * 2));
+  };
 
   const instructions = [];
 
@@ -154,16 +161,42 @@ function buildLoginScenario(site, username, password, session) {
       instructions.push({ evaluate: `window.location.reload();` });
     }
   } else {
+    // PRE-FLIGHT
+    instructions.push({ wait: randomize(3000) });
+    instructions.push({ evaluate: `window.location.href = "${loginUrl}";` });
+    instructions.push({ wait: randomize(2500) }); // Wait for navigation
+
     instructions.push({ wait_for: userSel });
-    instructions.push({ wait: 500 + Math.floor(Math.random() * 500) }); // Human delay
-    instructions.push({ fill: [userSel, username] });
-    instructions.push({ wait: 300 + Math.floor(Math.random() * 400) }); // Human delay
+    
+    const synthEvents = `
+      function simFocus(sel) {
+        const el = document.querySelector(sel);
+        if(!el) return;
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        el.focus();
+        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    `;
+
+    instructions.push({ evaluate: synthEvents + `simFocus("${userSel}");` });
+    instructions.push({ wait: randomize(700) });
+    instructions.push({ fill: [userSel, username] }); // uses CDP typing natively via ScrapingBee
+    
+    instructions.push({ wait: randomize(500) });
+    instructions.push({ evaluate: synthEvents + `simFocus("${passSel}");` });
+    instructions.push({ wait: randomize(500) });
     instructions.push({ fill: [passSel, password] });
-    instructions.push({ wait: 300 + Math.floor(Math.random() * 400) }); // Human delay
+    
+    instructions.push({ wait: randomize(600) });
+    instructions.push({ evaluate: synthEvents + `simFocus("${submitSel}");` });
+    instructions.push({ wait: randomize(300) });
     instructions.push({ click: submitSel });
   }
   
-  instructions.push({ wait: waitMs });
+  instructions.push({ wait: randomize(baseWaitMs) });
   instructions.push({ evaluate: "return JSON.stringify(window.localStorage || {});" });
 
   return { strict: false, instructions };
@@ -251,10 +284,18 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
     // documented behavior, no action needed.
   }
 
+  let targetUrl = loginUrl;
+  if (!sessionToRestore?.restore) {
+    try {
+      const urlObj = new URL(loginUrl);
+      targetUrl = urlObj.origin + '/'; // Neutral page (homepage)
+    } catch(e) {}
+  }
+
   const url = buildScrapingBeeUrl({
     apiKey,
-    targetUrl: loginUrl,
-    jsScenario: buildLoginScenario(site, username, password, sessionToRestore),
+    targetUrl: targetUrl,
+    jsScenario: buildLoginScenario(site, username, password, sessionToRestore, loginUrl),
     settings,
     proxy,
     session: sessionToRestore,
@@ -268,7 +309,17 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
 
   const started = Date.now();
   const isStealth = proxy.mode === 'stealth';
-  const headers = (settings.user_agent && !isStealth) ? { 'User-Agent': settings.user_agent } : undefined;
+  
+  // Enforce modern Chrome UA to bypass anti-bot, resolving OS/UA contradiction
+  const modernChromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+  
+  let headers = undefined;
+  if (settings.user_agent && !isStealth) {
+    headers = { 'User-Agent': settings.user_agent };
+  } else if (isStealth) {
+    headers = { 'User-Agent': modernChromeUA };
+  }
+
   const res = await fetch(url, { method: 'GET', headers });
   const elapsed = Date.now() - started;
 

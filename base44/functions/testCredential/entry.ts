@@ -219,17 +219,29 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
     }
   } else {
     // PRE-FLIGHT
-    // Point 2: Randomized Scrolling Behavior
-    const scrollScript = `
+    // Point 2: Randomized Scrolling Behavior & Auto-Accept Cookies
+    const preflightScript = `
       let scrollY = 0;
       const scrollStep = () => {
         scrollY += Math.random() * 100 + 50;
         window.scrollTo({ top: scrollY, behavior: 'smooth' });
       };
       scrollStep(); setTimeout(scrollStep, 500); setTimeout(scrollStep, 1200);
+      
+      // Auto-accept 3rd party / GDPR cookie consent banners
+      setTimeout(() => {
+        const keywords = ['accept', 'allow', 'agree', 'consent', 'ok', 'got it', 'yes'];
+        const els = document.querySelectorAll('button, a, [role="button"]');
+        for (const el of els) {
+          const txt = (el.innerText || el.textContent || '').toLowerCase().trim();
+          if (keywords.some(k => txt.includes(k)) && (txt.includes('cookie') || txt.includes('all'))) {
+            try { el.click(); } catch(e) {}
+          }
+        }
+      }, 800);
     `;
     instructions.push({ wait: randomize(1000) });
-    instructions.push({ evaluate: scrollScript });
+    instructions.push({ evaluate: preflightScript });
     instructions.push({ wait: randomize(2000) }); 
 
     instructions.push({ evaluate: `window.location.href = "${loginUrl}";` });

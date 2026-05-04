@@ -15,6 +15,7 @@ import MaintenancePanel from "@/components/settings/MaintenancePanel";
 import DiagnosticsPanel from "@/components/settings/DiagnosticsPanel";
 import TerminalSettingsPanel from "@/components/settings/TerminalSettingsPanel";
 import SiteSandbox from "@/components/settings/SiteSandbox";
+import SiteWizardDialog from "@/components/settings/SiteWizardDialog";
 import { Plus, Trash2, Sparkles, Pencil, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ export default function Settings() {
   const [draft, setDraft] = React.useState(BLANK);
   const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [sandboxSite, setSandboxSite] = React.useState(null);
+  const [showWizard, setShowWizard] = React.useState(false);
 
   const saveMut = useMutation({
     mutationFn: async (d) => {
@@ -171,6 +173,11 @@ export default function Settings() {
           <div className="flex items-center gap-2 mb-1">
             <Plus className="h-4 w-4 text-primary" />
             <div className="text-sm font-medium">{editing ? "Edit site" : "Add site"}</div>
+            {!editing && (
+              <Button variant="secondary" size="sm" className="ml-auto text-[10px] h-6 px-2" onClick={() => setShowWizard(true)}>
+                <Sparkles className="w-3 h-3 mr-1" /> Guided Wizard
+              </Button>
+            )}
           </div>
           <p className="text-[11px] text-muted-foreground -mt-1">
             Describe how to log in: the URL, which fields to fill, and how to detect success.
@@ -304,6 +311,11 @@ export default function Settings() {
         open={!!sandboxSite}
         onOpenChange={(v) => !v && setSandboxSite(null)}
         site={sandboxSite}
+      />
+      <SiteWizardDialog 
+        open={showWizard} 
+        onOpenChange={setShowWizard} 
+        onSave={(d) => saveMut.mutate(d)} 
       />
     </div>
   );

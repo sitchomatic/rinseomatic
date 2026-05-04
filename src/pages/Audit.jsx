@@ -1,6 +1,7 @@
 import React from "react";
 import PageHeader from "@/components/shared/PageHeader";
 import AuditFilters from "@/components/audit/AuditFilters";
+import RemediationPanel from "@/components/audit/RemediationPanel";
 import LogRow from "@/components/audit/LogRow";
 import { useLiveLogs } from "@/lib/useLiveLogs";
 import { Button } from "@/components/ui/button";
@@ -121,6 +122,8 @@ export default function Audit() {
         <Stat label="Warn" value={counts.warn} accent="text-amber-300" />
         <Stat label="Error" value={counts.error} accent="text-rose-300" />
       </div>
+
+      <RemediationPanel />
 
       <AuditFilters
         search={search} onSearch={setSearch}

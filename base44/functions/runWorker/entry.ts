@@ -92,8 +92,10 @@ async function testOne(base44, site, result, run) {
       error_message: data.error_message,
       elapsed_ms: data.elapsed_ms ?? (Date.now() - started),
       screenshot_url: data.screenshot_url || null,
+      session_cookies: data.session_cookies,
+      session_local_storage: data.session_local_storage,
     };
-  } catch (e) {
+    } catch (e) {
     return {
       status: 'error',
       error_message: e.message,
@@ -280,7 +282,7 @@ Deno.serve(async (req) => {
         screenshot_url: o.screenshot_url || null,
       });
       
-      // Post-flight credential updates for disabled accounts
+      // Post-flight credential updates for disabled accounts and sessions
       if (finalStatus === 'tempdisabled') {
         const cooldown = new Date(Date.now() + 60 * 60 * 1000).toISOString();
         await base44.asServiceRole.entities.Credential.update(r.credential_id, {
@@ -290,6 +292,13 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.Credential.update(r.credential_id, {
           perm_disabled: true
         });
+      } else if (finalStatus === 'working') {
+        const updates = {};
+        if (o.session_cookies) updates.session_cookies = o.session_cookies;
+        if (o.session_local_storage) updates.session_local_storage = o.session_local_storage;
+        if (Object.keys(updates).length > 0) {
+          await base44.asServiceRole.entities.Credential.update(r.credential_id, updates);
+        }
       }
     }));
 

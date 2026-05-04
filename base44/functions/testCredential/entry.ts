@@ -159,6 +159,28 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
   // Point 6: Advanced Fingerprint Spoofing
   const spoofScript = `
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => Math.floor(Math.random() * 4 + 4) * 2 });
+    Object.defineProperty(document, 'referrer', { get: () => 'https://www.google.com/' });
+
+    navigator.getBattery = async () => ({
+        level: 0.40 + Math.random() * 0.45,
+        charging: false,
+        chargingTime: Infinity,
+        dischargingTime: 8000,
+        addEventListener: () => {}
+    });
+
+    Object.defineProperty(navigator, 'connection', {
+      get: () => ({ rtt: 50, downlink: 10, effectiveType: '4g', saveData: false })
+    });
+
+    const OriginalDateTimeFormat = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = function(...args) {
+        if (!args[1]) args[1] = {};
+        if (!args[1].timeZone) args[1].timeZone = 'Australia/Brisbane';
+        return new OriginalDateTimeFormat(...args);
+    };
+
     if (window.WebGLRenderingContext) {
       const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
       WebGLRenderingContext.prototype.getParameter = function(parameter) {
@@ -167,6 +189,17 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
         return originalGetParameter.apply(this, arguments);
       };
     }
+
+    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function() {
+        const ctx = this.getContext('2d');
+        if (ctx && this.width > 0 && this.height > 0) {
+            ctx.fillStyle = \\\`rgba(\${Math.floor(Math.random() * 255)}, \${Math.floor(Math.random() * 255)}, \${Math.floor(Math.random() * 255)}, 0.01)\\\`;
+            ctx.fillRect(0, 0, this.width, this.height);
+        }
+        return originalToDataURL.apply(this, arguments);
+    };
+
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC) {
       const originalGetChannelData = AudioBuffer.prototype.getChannelData;
@@ -203,6 +236,13 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
     instructions.push({ wait: randomize(2500) }); // Wait for navigation
 
     instructions.push({ wait_for: userSel });
+
+    const loginScrollScript = `
+      window.scrollTo({ top: Math.random() * 200 + 100, behavior: 'smooth' });
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 800 + Math.random() * 500);
+    `;
+    instructions.push({ evaluate: loginScrollScript });
+    instructions.push({ wait: randomize(1500) });
     
     // Points 1, 3, 9: Bezier Mouse, Human Typing, Visibility Spoofing
     const synthEvents = `

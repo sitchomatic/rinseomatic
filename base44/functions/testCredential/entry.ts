@@ -107,11 +107,15 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
   // 'classic' = no proxy params → ScrapingBee uses its default datacenter pool.
 
   // Browser knobs (all documented).
-  if (settings.block_ads) params.set('block_ads', 'true');
-  if (settings.block_resources === false) params.set('block_resources', 'false');
-  // Note: block_resources defaults to TRUE in ScrapingBee. We only set it
-  // explicitly when the user disables it (most login flows need CSS/images
-  // OFF for speed, so default is fine).
+  // CRITICAL ANTI-BOT FIXES:
+  // Stealth mode requires unblocking resources and not overriding the User-Agent, 
+  // otherwise Cloudflare and other bot protections catch the fingerprint mismatch.
+  const isStealth = proxy.mode === 'stealth';
+  
+  if (settings.block_ads && !isStealth) params.set('block_ads', 'true');
+  if (settings.block_resources === false || isStealth) {
+    params.set('block_resources', 'false');
+  }
 
   if (settings.wait_after_load_ms) {
     params.set('wait', String(Math.min(35000, Math.max(0, settings.wait_after_load_ms))));
@@ -122,7 +126,11 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
     params.set('timeout', String(Math.min(140000, Math.max(1000, settings.timeout_ms))));
   }
   if (settings.capture_screenshots) params.set('screenshot', 'true');
-  if (settings.user_agent) params.set('forward_headers', 'true');
+  
+  // Set explicit device to Desktop (ScrapingBee emulates full desktop signatures)
+  params.set('device', 'desktop');
+
+  if (settings.user_agent && !isStealth) params.set('forward_headers', 'true');
 
   return `${API_BASE}?${params.toString()}`;
 }
@@ -147,8 +155,11 @@ function buildLoginScenario(site, username, password, session) {
     }
   } else {
     instructions.push({ wait_for: userSel });
+    instructions.push({ wait: 500 + Math.floor(Math.random() * 500) }); // Human delay
     instructions.push({ fill: [userSel, username] });
+    instructions.push({ wait: 300 + Math.floor(Math.random() * 400) }); // Human delay
     instructions.push({ fill: [passSel, password] });
+    instructions.push({ wait: 300 + Math.floor(Math.random() * 400) }); // Human delay
     instructions.push({ click: submitSel });
   }
   
@@ -256,7 +267,8 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   });
 
   const started = Date.now();
-  const headers = settings.user_agent ? { 'User-Agent': settings.user_agent } : undefined;
+  const isStealth = proxy.mode === 'stealth';
+  const headers = (settings.user_agent && !isStealth) ? { 'User-Agent': settings.user_agent } : undefined;
   const res = await fetch(url, { method: 'GET', headers });
   const elapsed = Date.now() - started;
 

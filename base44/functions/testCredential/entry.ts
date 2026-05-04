@@ -68,20 +68,25 @@ async function resolveProxy(base44, runProxy, settings) {
 // ------------ ScrapingBee request builder ------------
 // Returns a fully-formed GET URL for ScrapingBee, with the js_scenario
 // stringified per the docs.
-function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, session }) {
+function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, session, username }) {
   const params = new URLSearchParams();
   params.set('api_key', apiKey);
   params.set('url', targetUrl);
-  params.set('render_js', 'true'); // js_scenario implies JS rendering
-  params.set('json_response', 'true'); // we need js_scenario_report
-  params.set('js_scenario', JSON.stringify(jsScenario)); // MUST be stringified
+  params.set('render_js', 'true');
+  params.set('json_response', 'true');
+  params.set('js_scenario', JSON.stringify(jsScenario));
 
   if (session && session.cookies && Array.isArray(session.cookies)) {
     const cookieStr = session.cookies.map(c => `${c.name}=${c.value}`).join(';');
     params.set('cookies', cookieStr);
   }
 
-  // Proxy tier — the three documented options are mutually exclusive.
+  // Point 8: Sticky Proxy Sessions
+  const safeSessionId = btoa(username || 'anon').replace(/[^a-zA-Z0-9]/g, '').slice(0, 30);
+  params.set('session_id', safeSessionId);
+
+  const isStealth = proxy.mode === 'stealth';
+
   if (proxy.mode === 'premium') {
     params.set('premium_proxy', 'true');
     if (proxy.country_code) params.set('country_code', proxy.country_code);
@@ -98,20 +103,11 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
       params.set('own_proxy', `${scheme}://${auth}${host}:${port}`);
     }
   } else if (proxy.mode === 'none') {
-    // Direct fetch, no JS rendering — much cheaper but probably won't work
-    // for SPAs. Kept so users can opt in.
     params.set('render_js', 'false');
     params.delete('js_scenario');
     params.delete('json_response');
   }
-  // 'classic' = no proxy params → ScrapingBee uses its default datacenter pool.
 
-  // Browser knobs (all documented).
-  // CRITICAL ANTI-BOT FIXES:
-  // Stealth mode requires unblocking resources and not overriding the User-Agent, 
-  // otherwise Cloudflare and other bot protections catch the fingerprint mismatch.
-  const isStealth = proxy.mode === 'stealth';
-  
   if (settings.block_ads && !isStealth) params.set('block_ads', 'true');
   if (settings.block_resources === false || isStealth) {
     params.set('block_resources', 'false');
@@ -120,19 +116,24 @@ function buildScrapingBeeUrl({ apiKey, targetUrl, jsScenario, settings, proxy, s
   if (settings.wait_after_load_ms) {
     params.set('wait', String(Math.min(35000, Math.max(0, settings.wait_after_load_ms))));
   }
-  if (settings.viewport_width) params.set('window_width', String(settings.viewport_width));
-  if (settings.viewport_height) params.set('window_height', String(settings.viewport_height));
+  
+  // Point 5: Viewport Jitter
+  const baseW = settings.viewport_width || 1920;
+  const baseH = settings.viewport_height || 1080;
+  const jitterW = baseW - 15 + Math.floor(Math.random() * 30);
+  const jitterH = baseH - 15 + Math.floor(Math.random() * 30);
+  params.set('window_width', String(jitterW));
+  params.set('window_height', String(jitterH));
+
   if (settings.timeout_ms) {
     params.set('timeout', String(Math.min(140000, Math.max(1000, settings.timeout_ms))));
   }
   if (settings.capture_screenshots) params.set('screenshot', 'true');
   
-  // Set explicit device to Desktop (ScrapingBee emulates full desktop signatures)
   params.set('device', 'desktop');
-  params.set('os', 'windows'); // Fix OS/UA contradiction
+  params.set('os', 'windows');
 
-  if (settings.user_agent && !isStealth) params.set('forward_headers', 'true');
-  else if (isStealth) params.set('forward_headers', 'true'); // We'll forward the injected modern UA
+  params.set('forward_headers', 'true'); // Required for Referer and Accept-Language
 
   return `${API_BASE}?${params.toString()}`;
 }
@@ -155,6 +156,29 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
 
   const instructions = [];
 
+  // Point 6: Advanced Fingerprint Spoofing
+  const spoofScript = `
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    if (window.WebGLRenderingContext) {
+      const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) return 'Intel Inc.';
+        if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+        return originalGetParameter.apply(this, arguments);
+      };
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+      AudioBuffer.prototype.getChannelData = function() {
+        const results = originalGetChannelData.apply(this, arguments);
+        for (let i = 0; i < results.length; i+=100) results[i] = results[i] + (Math.random() * 0.0000001);
+        return results;
+      };
+    }
+  `;
+  instructions.push({ evaluate: spoofScript });
+
   if (session && session.restore) {
     if (session.local_storage) {
       instructions.push({ evaluate: `try { const ls = ${session.local_storage}; for(let k in ls) window.localStorage.setItem(k, ls[k]); } catch(e) {}` });
@@ -162,36 +186,100 @@ function buildLoginScenario(site, username, password, session, loginUrl) {
     }
   } else {
     // PRE-FLIGHT
-    instructions.push({ wait: randomize(3000) });
+    // Point 2: Randomized Scrolling Behavior
+    const scrollScript = `
+      let scrollY = 0;
+      const scrollStep = () => {
+        scrollY += Math.random() * 100 + 50;
+        window.scrollTo({ top: scrollY, behavior: 'smooth' });
+      };
+      scrollStep(); setTimeout(scrollStep, 500); setTimeout(scrollStep, 1200);
+    `;
+    instructions.push({ wait: randomize(1000) });
+    instructions.push({ evaluate: scrollScript });
+    instructions.push({ wait: randomize(2000) }); 
+
     instructions.push({ evaluate: `window.location.href = "${loginUrl}";` });
     instructions.push({ wait: randomize(2500) }); // Wait for navigation
 
     instructions.push({ wait_for: userSel });
     
+    // Points 1, 3, 9: Bezier Mouse, Human Typing, Visibility Spoofing
     const synthEvents = `
-      function simFocus(sel) {
+      window.bezierCurve = function(t, p0, p1, p2, p3) {
+        const cX = 3 * (p1.x - p0.x), bX = 3 * (p2.x - p1.x) - cX, aX = p3.x - p0.x - cX - bX;
+        const cY = 3 * (p1.y - p0.y), bY = 3 * (p2.y - p1.y) - cY, aY = p3.y - p0.y - cY - bY;
+        const x = (aX * Math.pow(t, 3)) + (bX * Math.pow(t, 2)) + (cX * t) + p0.x;
+        const y = (aY * Math.pow(t, 3)) + (bY * Math.pow(t, 2)) + (cY * t) + p0.y;
+        return { x, y };
+      };
+      window.simMouseAndFocus = async function(sel) {
         const el = document.querySelector(sel);
         if(!el) return;
+        const rect = el.getBoundingClientRect();
+        const target = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        const start = { x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight };
+        const cp1 = { x: start.x + (Math.random() * 100 - 50), y: start.y + (Math.random() * 100 - 50) };
+        const cp2 = { x: target.x + (Math.random() * 100 - 50), y: target.y + (Math.random() * 100 - 50) };
+        
+        for (let i = 0; i <= 10; i++) {
+          const pt = window.bezierCurve(i / 10, start, cp1, cp2, target);
+          document.dispatchEvent(new MouseEvent('mousemove', { clientX: pt.x, clientY: pt.y, bubbles: true }));
+          await new Promise(r => setTimeout(r, 20 + Math.random() * 20));
+        }
+        
         el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
         el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         el.focus();
         el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
         el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
         el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      }
+      };
+      window.humanType = async function(sel, text) {
+        const el = document.querySelector(sel);
+        if(!el) return;
+        el.value = '';
+        for(let i=0; i<text.length; i++) {
+          if (Math.random() < 0.05 && i > 0) {
+             const wrong = String.fromCharCode(text.charCodeAt(i) + 1);
+             el.value += wrong;
+             el.dispatchEvent(new Event('input', {bubbles: true}));
+             await new Promise(r => setTimeout(r, 100 + Math.random() * 150));
+             el.value = el.value.slice(0, -1);
+             el.dispatchEvent(new Event('input', {bubbles: true}));
+             await new Promise(r => setTimeout(r, 100 + Math.random() * 150));
+          }
+          el.value += text[i];
+          el.dispatchEvent(new Event('input', {bubbles: true}));
+          await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+        }
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      };
+      window.spoofVisibility = function() {
+        Object.defineProperty(document, 'visibilityState', { get: () => 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        setTimeout(() => {
+          Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+          document.dispatchEvent(new Event('visibilitychange'));
+        }, 1500);
+      };
     `;
 
-    instructions.push({ evaluate: synthEvents + `simFocus("${userSel}");` });
-    instructions.push({ wait: randomize(700) });
-    instructions.push({ fill: [userSel, username] }); // uses CDP typing natively via ScrapingBee
+    instructions.push({ evaluate: synthEvents });
+    instructions.push({ evaluate: `return window.simMouseAndFocus("${userSel}");` });
+    instructions.push({ wait: randomize(200) });
+    instructions.push({ evaluate: `return window.humanType("${userSel}", \`${username}\`);` });
     
-    instructions.push({ wait: randomize(500) });
-    instructions.push({ evaluate: synthEvents + `simFocus("${passSel}");` });
-    instructions.push({ wait: randomize(500) });
-    instructions.push({ fill: [passSel, password] });
+    instructions.push({ wait: randomize(400) });
+    instructions.push({ evaluate: `window.spoofVisibility();` });
+    instructions.push({ wait: randomize(2000) });
+
+    instructions.push({ evaluate: `return window.simMouseAndFocus("${passSel}");` });
+    instructions.push({ wait: randomize(200) });
+    instructions.push({ evaluate: `return window.humanType("${passSel}", \`${password}\`);` });
     
     instructions.push({ wait: randomize(600) });
-    instructions.push({ evaluate: synthEvents + `simFocus("${submitSel}");` });
+    instructions.push({ evaluate: `return window.simMouseAndFocus("${submitSel}");` });
     instructions.push({ wait: randomize(300) });
     instructions.push({ click: submitSel });
   }
@@ -299,6 +387,7 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
     settings,
     proxy,
     session: sessionToRestore,
+    username: username,
   });
 
   // Stream the literal outbound URL into the live terminal (api_key redacted).
@@ -313,11 +402,26 @@ async function runOne(apiKey, settings, proxy, site, loginUrl, username, passwor
   // Enforce modern Chrome UA to bypass anti-bot, resolving OS/UA contradiction
   const modernChromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
   
-  let headers = undefined;
+  // Point 4: Geographic Headers
+  const geoMap = {
+    'au': { lang: 'en-AU,en-GB;q=0.9,en-US;q=0.8,en;q=0.7' },
+    'us': { lang: 'en-US,en;q=0.9' },
+    'gb': { lang: 'en-GB,en-US;q=0.9,en;q=0.8' },
+    'ca': { lang: 'en-CA,en-US;q=0.9,en;q=0.8' },
+    'nz': { lang: 'en-NZ,en-GB;q=0.9,en-US;q=0.8,en;q=0.7' }
+  };
+  const geoInfo = geoMap[(proxy.country_code || 'au').toLowerCase()] || geoMap['au'];
+
+  let headers = {
+    'Accept-Language': geoInfo.lang,
+    // Point 10: Dynamic Referrer
+    'Referer': 'https://www.google.com/search?q=' + encodeURIComponent(site.label || site_key)
+  };
+  
   if (settings.user_agent && !isStealth) {
-    headers = { 'User-Agent': settings.user_agent };
+    headers['User-Agent'] = settings.user_agent;
   } else if (isStealth) {
-    headers = { 'User-Agent': modernChromeUA };
+    headers['User-Agent'] = modernChromeUA;
   }
 
   const res = await fetch(url, { method: 'GET', headers });
